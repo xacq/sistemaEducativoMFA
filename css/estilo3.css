@@ -1,0 +1,61 @@
+body {
+    font-family: 'Roboto', sans-serif;
+    border-top: 4px solid #00abf0;
+}
+header {
+    margin-top: 140px;
+}
+.navbar-nav a:hover {
+    background-color:cornsilk;
+    color: blue;
+}
+form {
+    margin: auto;
+    background: rgba(0,0,0,0.5);
+    color: white;
+    max-width: 800px;
+    padding: 40px;
+    margin-top: 20px;
+    box-shadow: 0px, 0px, 4px, grey;
+    border-radius: 6px;
+    box-sizing: border-box;
+}
+input, textarea{
+    font-size: 16px;
+    color: blue;
+    width: 100%;
+    border: none;
+    border-bottom: 1px solid #00abf0;
+    outline: none;
+    padding: 15px;
+}
+textarea {
+    min-height: 140px;
+    max-height: 200px;
+    max-width: 100%;
+}
+#boton {
+    background-color:cornflowerblue;
+    border-radius: 1px;
+    border: 2px solid #f2f2f2;
+    color: #fff;
+    cursor: pointer;
+    font-family: "Roboto";
+    font-size: 20px;
+    width: 100%;
+    padding: 15px;
+    -webkit-transition: all .3s ease;
+    -moz-transition: all .3s ease;
+    -o-transition: all .3s ease;
+    transition: all .3s ease;
+}
+#boton:hover{
+    cursor: pointer;
+    background-color: darkblue;
+}
+video {
+    position: fixed;
+    min-width: 100%;
+    min-height: 120%;
+    z-index: -1;
+}

@@ -1,0 +1,198 @@
+/* Estilos personalizados para el Sistema Académico */
+
+/* Colores principales */
+:root {
+    --academic-primary: #3f51b5;
+    --academic-secondary: #ff4081;
+    --academic-success: #4caf50;
+    --academic-info: #2196f3;
+    --academic-warning: #ff9800;
+    --academic-danger: #f44336;
+    --academic-light: #f5f5f5;
+    --academic-dark: #212121;
+}
+
+/* Estilos para la barra lateral */
+.sidebar {
+    background-color: var(--academic-primary);
+    min-height: 100vh;
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 100;
+    padding: 0;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+.sidebar .nav-link {
+    color: rgba(255, 255, 255, 0.7);
+    padding: 0.75rem 1rem;
+    font-weight: 500;
+    transition: all 0.3s;
+}
+
+.sidebar .nav-link:hover {
+    color: rgba(255, 255, 255, 1);
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.sidebar .nav-link.active {
+    color: #fff;
+    background-color: rgba(255, 255, 255, 0.2);
+    border-left: 4px solid var(--academic-secondary);
+}
+
+.sidebar .nav-link i {
+    margin-right: 0.5rem;
+}
+
+/* Estilos para el contenido principal */
+.card-header-academic {
+    background-color: var(--academic-primary);
+    color: white;
+}
+
+.btn-academic {
+    background-color: var(--academic-primary);
+    color: white;
+}
+
+.btn-academic:hover {
+    background-color: #303f9f;
+    color: white;
+}
+
+.table-academic {
+    background-color: var(--academic-primary);
+    color: white;
+}
+
+/* Estilos para la página de login */
+.login-container {
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-top: 50px;
+}
+
+.login-image {
+    background-image: url('../img/school_bg.jpg');
+    background-size: cover;
+    background-position: center;
+    min-height: 500px;
+    position: relative;
+}
+
+.login-image .overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(63, 81, 181, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.login-form-container {
+    background-color: white;
+    display: flex;
+    align-items: center;
+}
+
+/* Estilos para notificaciones */
+.notification-badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background-color: var(--academic-secondary);
+    color: white;
+    border-radius: 50%;
+    width: 18px;
+    height: 18px;
+    font-size: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Estilos para actividades y notificaciones */
+.activity-icon, .notification-icon {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Estilos para los permisos de edición */
+.edit-permission-director {
+    display: block; /* Visible solo para directores */
+}
+
+.edit-permission-professor {
+    display: block; /* Visible solo para profesores */
+}
+
+.edit-permission-student {
+    display: none; /* No visible para estudiantes */
+}
+
+/* Estilos para indicar permisos de edición */
+.editable-by-director {
+    border-left: 3px solid var(--academic-primary);
+    padding-left: 10px;
+}
+
+.editable-by-professor {
+    border-left: 3px solid var(--academic-success);
+    padding-left: 10px;
+}
+
+.view-only {
+    border-left: 3px solid var(--academic-light);
+    padding-left: 10px;
+}
+
+/* Estilos para tooltips de permisos */
+.permission-tooltip {
+    position: relative;
+    display: inline-block;
+}
+
+.permission-tooltip .tooltip-text {
+    visibility: hidden;
+    width: 120px;
+    background-color: #555;
+    color: #fff;
+    text-align: center;
+    border-radius: 6px;
+    padding: 5px;
+    position: absolute;
+    z-index: 1;
+    bottom: 125%;
+    left: 50%;
+    margin-left: -60px;
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+
+.permission-tooltip:hover .tooltip-text {
+    visibility: visible;
+    opacity: 1;
+}
+
+/* Estilos responsivos */
+@media (max-width: 767.98px) {
+    .sidebar {
+        position: static;
+        height: auto;
+        min-height: auto;
+    }
+    
+    .login-image {
+        min-height: 200px;
+    }
+}
