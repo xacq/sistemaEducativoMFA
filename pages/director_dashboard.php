@@ -79,7 +79,7 @@ include __DIR__ . '/side_bar_director.php';
                                 <p><strong>Fundación:</strong> 1918 (106 años de trayectoria)</p>
                                 <p><strong>Niveles:</strong> Primaria y Secundaria</p>
                                 <p><strong>Aniversario:</strong> Marzo (Centésimo Sexto Aniversario celebrado en 2024)</p>
-                                <div class="mt-2">
+                                <div class="mt-2" hidden>
                                     <button class="btn btn-sm btn-outline-primary me-2">
                                         <i class="bi bi-pencil-square"></i> Editar Información
                                     </button>

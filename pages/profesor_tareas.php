@@ -21,6 +21,26 @@ $stmt->execute();
 $stmt->bind_result($nombre, $apellido);
 $stmt->fetch();
 $stmt->close();
+
+// --- INICIO: Cargar los cursos asignados a este profesor ---
+$cursos_profesor = [];
+$profesor_id = $_SESSION['user_id']; // El ID del profesor logueado
+
+$stmt_cursos = $mysqli->prepare("
+    SELECT id, nombre, grado, seccion 
+    FROM cursos 
+    WHERE profesor_id = ? AND estatus = 'Activo'
+    ORDER BY nombre, grado
+");
+$stmt_cursos->bind_param('i', $profesor_id);
+$stmt_cursos->execute();
+$result_cursos = $stmt_cursos->get_result();
+while ($row = $result_cursos->fetch_assoc()) {
+    $cursos_profesor[] = $row;
+}
+$stmt_cursos->close();
+// --- FIN: Cargar cursos ---
+
 include __DIR__ . '/side_bar_profesor.php';
 ?>
 <!DOCTYPE html>
@@ -446,101 +466,103 @@ include __DIR__ . '/side_bar_profesor.php';
                     <h5 class="modal-title" id="newAssignmentModalLabel">Nueva Tarea</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body">
-                    <form>
+                <!-- INICIO DEL FORMULARIO MODIFICADO -->
+                <form action="guardar_tarea.php" method="POST" enctype="multipart/form-data">
+                    <div class="modal-body">
                         <div class="row mb-3">
                             <div class="col-md-6">
                                 <label for="assignmentTitle" class="form-label">Título</label>
-                                <input type="text" class="form-control" id="assignmentTitle" placeholder="Ej: Ejercicios de Límites" required>
+                                <input type="text" class="form-control" id="assignmentTitle" name="assignmentTitle" placeholder="Ej: Ejercicios de Límites" required>
                             </div>
                             <div class="col-md-6">
                                 <label for="assignmentCourse" class="form-label">Curso</label>
-                                <select class="form-select" id="assignmentCourse" required>
+                                <select class="form-select" id="assignmentCourse" name="assignmentCourse" required>
                                     <option selected disabled value="">Seleccionar curso...</option>
-                                    <option>Matemáticas - 6° Secundaria</option>
-                                    <option>Matemáticas - 5° Secundaria</option>
-                                    <option>Física - 6° Secundaria</option>
-                                    <option>Física - 5° Secundaria</option>
-                                    <option>Química - 6° Secundaria</option>
-                                    <option>Química - 5° Secundaria</option>
+                                    <?php foreach ($cursos_profesor as $curso): ?>
+                                        <option value="<?php echo $curso['id']; ?>">
+                                            <?php echo htmlspecialchars($curso['nombre'] . ' - ' . $curso['grado'] . $curso['seccion']); ?>
+                                        </option>
+                                    <?php endforeach; ?>
                                 </select>
                             </div>
                         </div>
                         <div class="row mb-3">
                             <div class="col-md-6">
                                 <label for="assignmentType" class="form-label">Tipo</label>
-                                <select class="form-select" id="assignmentType" required>
+                                <select class="form-select" id="assignmentType" name="assignmentType" required>
                                     <option selected disabled value="">Seleccionar tipo...</option>
-                                    <option>Tarea</option>
-                                    <option>Práctica</option>
-                                    <option>Proyecto</option>
-                                    <option>Investigación</option>
-                                    <option>Cuestionario</option>
+                                    <option value="Tarea">Tarea</option>
+                                    <option value="Práctica">Práctica</option>
+                                    <option value="Proyecto">Proyecto</option>
+                                    <option value="Investigación">Investigación</option>
+                                    <option value="Cuestionario">Cuestionario</option>
                                 </select>
                             </div>
                             <div class="col-md-6">
                                 <label for="assignmentWeight" class="form-label">Ponderación (%)</label>
-                                <input type="number" class="form-control" id="assignmentWeight" min="1" max="100" value="10" required>
+                                <input type="number" class="form-control" id="assignmentWeight" name="assignmentWeight" min="0" max="100" value="10" required>
                             </div>
                         </div>
                         <div class="row mb-3">
                             <div class="col-md-6">
                                 <label for="assignmentStartDate" class="form-label">Fecha de Asignación</label>
-                                <input type="date" class="form-control" id="assignmentStartDate" required>
+                                <input type="date" class="form-control" id="assignmentStartDate" name="assignmentStartDate" required>
                             </div>
                             <div class="col-md-6">
                                 <label for="assignmentDueDate" class="form-label">Fecha de Entrega</label>
-                                <input type="date" class="form-control" id="assignmentDueDate" required>
+                                <input type="date" class="form-control" id="assignmentDueDate" name="assignmentDueDate" required>
                             </div>
                         </div>
                         <div class="mb-3">
                             <label for="assignmentDescription" class="form-label">Descripción</label>
-                            <textarea class="form-control" id="assignmentDescription" rows="3" placeholder="Descripción detallada de la tarea..." required></textarea>
+                            <textarea class="form-control" id="assignmentDescription" name="assignmentDescription" rows="3" placeholder="Descripción detallada de la tarea..."></textarea>
                         </div>
                         <div class="mb-3">
                             <label for="assignmentInstructions" class="form-label">Instrucciones</label>
-                            <textarea class="form-control" id="assignmentInstructions" rows="3" placeholder="Instrucciones específicas para completar la tarea..." required></textarea>
+                            <textarea class="form-control" id="assignmentInstructions" name="assignmentInstructions" rows="3" placeholder="Instrucciones específicas para completar la tarea..."></textarea>
                         </div>
                         <div class="mb-3">
                             <label for="assignmentResources" class="form-label">Recursos</label>
-                            <textarea class="form-control" id="assignmentResources" rows="2" placeholder="Enlaces, libros, o materiales de referencia..."></textarea>
+                            <textarea class="form-control" id="assignmentResources" name="assignmentResources" rows="2" placeholder="Enlaces, libros, o materiales de referencia..."></textarea>
                         </div>
                         <div class="mb-3">
                             <label for="assignmentAttachments" class="form-label">Archivos Adjuntos</label>
-                            <input class="form-control" type="file" id="assignmentAttachments" multiple>
+                            <!-- 'multiple' permite seleccionar varios archivos. El '[]' en el name es VITAL. -->
+                            <input class="form-control" type="file" id="assignmentAttachments" name="assignmentAttachments[]" multiple>
                         </div>
                         <div class="row mb-3">
                             <div class="col-md-6">
                                 <label for="assignmentMaxScore" class="form-label">Puntaje Máximo</label>
-                                <input type="number" class="form-control" id="assignmentMaxScore" min="1" value="100" required>
+                                <input type="number" class="form-control" id="assignmentMaxScore" name="assignmentMaxScore" min="1" value="100" required>
                             </div>
                             <div class="col-md-6">
                                 <label for="assignmentSubmissionType" class="form-label">Tipo de Entrega</label>
-                                <select class="form-select" id="assignmentSubmissionType" required>
-                                    <option selected>Archivo</option>
-                                    <option>Texto en línea</option>
-                                    <option>Ambos</option>
+                                <select class="form-select" id="assignmentSubmissionType" name="assignmentSubmissionType" required>
+                                    <option value="Archivo" selected>Archivo</option>
+                                    <option value="Texto en línea">Texto en línea</option>
+                                    <option value="Ambos">Ambos</option>
                                 </select>
                             </div>
                         </div>
                         <div class="mb-3">
                             <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="notifyStudentsAssignment" checked>
+                                <input class="form-check-input" type="checkbox" id="notifyStudentsAssignment" name="notifyStudentsAssignment" value="1" checked>
                                 <label class="form-check-label" for="notifyStudentsAssignment">
                                     Notificar a los estudiantes
                                 </label>
                             </div>
                         </div>
-                    </form>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="button" class="btn btn-academic">Guardar Tarea</button>
-                </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <!-- Cambiado a type="submit" -->
+                        <button type="submit" class="btn btn-academic">Guardar Tarea</button>
+                    </div>
+                </form>
+                <!-- FIN DEL FORMULARIO MODIFICADO -->
             </div>
         </div>
     </div>
-
     <!-- View Assignment Modal -->
     <div class="modal fade" id="viewAssignmentModal" tabindex="-1" aria-labelledby="viewAssignmentModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-xl">

@@ -62,6 +62,23 @@ include __DIR__ . '/side_bar_director.php';
                         </div>
                     </div>
                 </div>
+                    <!-- INICIO: Bloque para mostrar mensajes de sesión -->
+                    <?php if (isset($_SESSION['success_message'])): ?>
+                        <div class="alert alert-success alert-dismissible fade show" role="alert">
+                            <?php echo $_SESSION['success_message']; ?>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                        <?php unset($_SESSION['success_message']); // Limpiar el mensaje para no mostrarlo de nuevo ?>
+                    <?php endif; ?>
+
+                    <?php if (isset($_SESSION['error_message'])): ?>
+                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                            <?php echo $_SESSION['error_message']; ?>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                    <?php unset($_SESSION['error_message']); // Limpiar el mensaje ?>
+                <?php endif; ?>
+                <!-- FIN: Bloque para mostrar mensajes -->
 
                 <!-- Search and Add Student -->
                 <div class="row mb-4">
@@ -455,128 +472,136 @@ include __DIR__ . '/side_bar_director.php';
         </div>
     </div>
 
-    <!-- Add Student Modal -->
-    <div class="modal fade" id="addStudentModal" tabindex="-1" aria-labelledby="addStudentModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header card-header-academic text-white">
-                    <h5 class="modal-title" id="addStudentModalLabel">Agregar Nuevo Estudiante</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
+<!-- Add Student Modal -->
+<div class="modal fade" id="addStudentModal" tabindex="-1" aria-labelledby="addStudentModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header card-header-academic text-white">
+                <h5 class="modal-title" id="addStudentModalLabel">Agregar Nuevo Estudiante</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <!-- INICIO DEL FORMULARIO MODIFICADO -->
+            <form action="guardar_estudiante.php" method="POST" enctype="multipart/form-data">
                 <div class="modal-body">
-                    <form>
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                <label for="studentName" class="form-label">Nombre Completo</label>
-                                <input type="text" class="form-control" id="studentName" required>
-                            </div>
-                            <div class="col-md-6">
-                                <label for="studentID" class="form-label">ID de Estudiante</label>
-                                <input type="text" class="form-control" id="studentID" required>
-                            </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="studentName" class="form-label">Nombre Completo</label>
+                            <!-- El 'name' es crucial -->
+                            <input type="text" class="form-control" id="studentName" name="studentName" placeholder="Ej: Ana Sofía" required>
                         </div>
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                <label for="studentBirthdate" class="form-label">Fecha de Nacimiento</label>
-                                <input type="date" class="form-control" id="studentBirthdate" required>
-                            </div>
-                            <div class="col-md-6">
-                                <label for="studentGender" class="form-label">Género</label>
-                                <select class="form-select" id="studentGender" required>
-                                    <option value="" selected disabled>Seleccionar género</option>
-                                    <option value="male">Masculino</option>
-                                    <option value="female">Femenino</option>
-                                    <option value="other">Otro</option>
-                                </select>
-                            </div>
+                        <div class="col-md-6">
+                            <label for="studentLastName" class="form-label">Apellidos</label>
+                            <input type="text" class="form-control" id="studentLastName" name="studentLastName" placeholder="Ej: Pérez García" required>
                         </div>
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                <label for="studentGrade" class="form-label">Grado</label>
-                                <select class="form-select" id="studentGrade" required>
-                                    <option value="" selected disabled>Seleccionar grado</option>
-                                    <option value="1p">1° Primaria</option>
-                                    <option value="2p">2° Primaria</option>
-                                    <option value="3p">3° Primaria</option>
-                                    <option value="4p">4° Primaria</option>
-                                    <option value="5p">5° Primaria</option>
-                                    <option value="6p">6° Primaria</option>
-                                    <option value="1s">1° Secundaria</option>
-                                    <option value="2s">2° Secundaria</option>
-                                    <option value="3s">3° Secundaria</option>
-                                    <option value="4s">4° Secundaria</option>
-                                    <option value="5s">5° Secundaria</option>
-                                    <option value="6s">6° Secundaria</option>
-                                </select>
-                            </div>
-                            <div class="col-md-6">
-                                <label for="studentSection" class="form-label">Sección</label>
-                                <select class="form-select" id="studentSection" required>
-                                    <option value="" selected disabled>Seleccionar sección</option>
-                                    <option value="A">A</option>
-                                    <option value="B">B</option>
-                                    <option value="C">C</option>
-                                    <option value="D">D</option>
-                                </select>
-                            </div>
+                    </div>
+                     <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="studentID" class="form-label">Código de Estudiante</label>
+                            <input type="text" class="form-control" id="studentID" name="studentID" required>
                         </div>
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                <label for="studentEmail" class="form-label">Correo Electrónico</label>
-                                <input type="email" class="form-control" id="studentEmail">
-                            </div>
-                            <div class="col-md-6">
-                                <label for="studentPhone" class="form-label">Teléfono</label>
-                                <input type="tel" class="form-control" id="studentPhone">
-                            </div>
+                        <div class="col-md-6">
+                            <label for="studentEmail" class="form-label">Correo Electrónico (para login)</label>
+                            <input type="email" class="form-control" id="studentEmail" name="studentEmail" required>
                         </div>
-                        <div class="row mb-3">
-                            <div class="col-md-12">
-                                <label for="studentAddress" class="form-label">Dirección</label>
-                                <input type="text" class="form-control" id="studentAddress" required>
-                            </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="studentBirthdate" class="form-label">Fecha de Nacimiento</label>
+                            <input type="date" class="form-control" id="studentBirthdate" name="studentBirthdate" required>
                         </div>
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                <label for="parentName" class="form-label">Nombre del Padre/Madre/Tutor</label>
-                                <input type="text" class="form-control" id="parentName" required>
-                            </div>
-                            <div class="col-md-6">
-                                <label for="parentPhone" class="form-label">Teléfono del Padre/Madre/Tutor</label>
-                                <input type="tel" class="form-control" id="parentPhone" required>
-                            </div>
+                        <div class="col-md-6">
+                            <label for="studentGender" class="form-label">Género</label>
+                            <select class="form-select" id="studentGender" name="studentGender" required>
+                                <option value="" selected disabled>Seleccionar género</option>
+                                <option value="Masculino">Masculino</option>
+                                <option value="Femenino">Femenino</option>
+                                <option value="Otro">Otro</option>
+                            </select>
                         </div>
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                <label for="enrollmentDate" class="form-label">Fecha de Inscripción</label>
-                                <input type="date" class="form-control" id="enrollmentDate" required>
-                            </div>
-                            <div class="col-md-6">
-                                <label for="studentStatus" class="form-label">Estado</label>
-                                <select class="form-select" id="studentStatus" required>
-                                    <option value="active" selected>Activo</option>
-                                    <option value="inactive">Inactivo</option>
-                                    <option value="suspended">Suspendido</option>
-                                </select>
-                            </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="studentGrade" class="form-label">Grado</label>
+                            <select class="form-select" id="studentGrade" name="studentGrade" required>
+                                <option value="" selected disabled>Seleccionar grado</option>
+                                <option value="1P">1° Primaria</option>
+                                <option value="2P">2° Primaria</option>
+                                <option value="3P">3° Primaria</option>
+                                <option value="4P">4° Primaria</option>
+                                <option value="5P">5° Primaria</option>
+                                <option value="6P">6° Primaria</option>
+                                <option value="1S">1° Secundaria</option>
+                                <option value="2S">2° Secundaria</option>
+                                <option value="3S">3° Secundaria</option>
+                                <option value="4S">4° Secundaria</option>
+                                <option value="5S">5° Secundaria</option>
+                                <option value="6S">6° Secundaria</option>
+                            </select>
                         </div>
-                        <div class="mb-3">
-                            <label for="studentPhoto" class="form-label">Fotografía</label>
-                            <input class="form-control" type="file" id="studentPhoto">
+                        <div class="col-md-6">
+                            <label for="studentSection" class="form-label">Sección</label>
+                            <select class="form-select" id="studentSection" name="studentSection" required>
+                                <option value="" selected disabled>Seleccionar sección</option>
+                                <option value="A">A</option>
+                                <option value="B">B</option>
+                                <option value="C">C</option>
+                                <option value="D">D</option>
+                            </select>
                         </div>
-                        <div class="mb-3">
-                            <label for="studentNotes" class="form-label">Observaciones</label>
-                            <textarea class="form-control" id="studentNotes" rows="3"></textarea>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="studentPhone" class="form-label">Teléfono</label>
+                            <input type="tel" class="form-control" id="studentPhone" name="studentPhone">
                         </div>
-                    </form>
+                        <div class="col-md-6">
+                            <label for="studentAddress" class="form-label">Dirección</label>
+                            <input type="text" class="form-control" id="studentAddress" name="studentAddress" required>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="parentName" class="form-label">Nombre del Padre/Madre/Tutor</label>
+                            <input type="text" class="form-control" id="parentName" name="parentName" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="parentPhone" class="form-label">Teléfono del Padre/Madre/Tutor</label>
+                            <input type="tel" class="form-control" id="parentPhone" name="parentPhone" required>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="enrollmentDate" class="form-label">Fecha de Inscripción</label>
+                            <input type="date" class="form-control" id="enrollmentDate" name="enrollmentDate" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="studentStatus" class="form-label">Estado</label>
+                            <select class="form-select" id="studentStatus" name="studentStatus" required>
+                                <option value="Activo" selected>Activo</option>
+                                <option value="Inactivo">Inactivo</option>
+                                <option value="Suspendido">Suspendido</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="studentPhoto" class="form-label">Fotografía</label>
+                        <input class="form-control" type="file" id="studentPhoto" name="studentPhoto">
+                    </div>
+                    <div class="mb-3">
+                        <label for="studentNotes" class="form-label">Observaciones</label>
+                        <textarea class="form-control" id="studentNotes" name="studentNotes" rows="3"></textarea>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="button" class="btn btn-academic">Guardar</button>
+                    <!-- Cambiado a type="submit" para enviar el formulario -->
+                    <button type="submit" class="btn btn-academic">Guardar Estudiante</button>
                 </div>
-            </div>
+            </form>
+            <!-- FIN DEL FORMULARIO MODIFICADO -->
         </div>
     </div>
+</div>
 
     <!-- Scripts -->
     <script src="../js/jquery-3.3.1.min.js"></script>

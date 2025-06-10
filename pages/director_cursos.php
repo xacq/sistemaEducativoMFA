@@ -21,6 +21,36 @@ $stmt->execute();
 $stmt->bind_result($nombre, $apellido);
 $stmt->fetch();
 $stmt->close();
+
+// --- INICIO: Cargar datos para los dropdowns del modal ---
+
+// Cargar Profesores (usuarios con rol 'profesor')
+$profesores = [];
+$stmt_profesores = $mysqli->prepare("
+    SELECT id, nombre, apellido FROM usuarios WHERE role_id = '2' ORDER BY apellido, nombre
+");
+$stmt_profesores->execute();
+$result_profesores = $stmt_profesores->get_result();
+while ($row = $result_profesores->fetch_assoc()) {
+    $profesores[] = $row;
+}
+$stmt_profesores->close();
+
+// Cargar Materias (asumiendo que tienes una tabla 'materias')
+// Si no tienes una tabla 'materias', ¡deberías crearla! Es fundamental.
+// CREATE TABLE materias (id INT AUTO_INCREMENT PRIMARY KEY, nombre VARCHAR(100) NOT NULL);
+$materias = [];
+// Asegúrate de que la tabla 'materias' exista. Si no, esta consulta fallará.
+if ($result_materias = $mysqli->query("SELECT id, nombre FROM materias ORDER BY nombre")) {
+    while ($row = $result_materias->fetch_assoc()) {
+        $materias[] = $row;
+    }
+    $result_materias->free();
+}
+
+// --- FIN: Cargar datos para los dropdowns ---
+
+
 include __DIR__ . '/side_bar_director.php';
 ?>
 <!DOCTYPE html>
@@ -63,6 +93,24 @@ include __DIR__ . '/side_bar_director.php';
                         </div>
                     </div>
                 </div>
+
+                <!-- INICIO: Bloque para mostrar mensajes de sesión -->
+                <?php if (isset($_SESSION['success_message'])): ?>
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        <?php echo $_SESSION['success_message']; ?>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                    <?php unset($_SESSION['success_message']); ?>
+                <?php endif; ?>
+
+                <?php if (isset($_SESSION['error_message'])): ?>
+                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                        <?php echo $_SESSION['error_message']; ?>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                    <?php unset($_SESSION['error_message']); ?>
+                <?php endif; ?>
+                <!-- FIN: Bloque para mostrar mensajes -->
 
                 <!-- Search and Add Course -->
                 <div class="row mb-4">
@@ -477,167 +525,127 @@ include __DIR__ . '/side_bar_director.php';
         </div>
     </div>
 
-    <!-- Add Course Modal -->
-    <div class="modal fade" id="addCourseModal" tabindex="-1" aria-labelledby="addCourseModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header card-header-academic text-white">
-                    <h5 class="modal-title" id="addCourseModalLabel">Agregar Nuevo Curso</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
+<!-- Add Course Modal -->
+<div class="modal fade" id="addCourseModal" tabindex="-1" aria-labelledby="addCourseModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header card-header-academic text-white">
+                <h5 class="modal-title" id="addCourseModalLabel">Agregar Nuevo Curso</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <!-- INICIO DEL FORMULARIO MODIFICADO -->
+            <form action="guardar_curso.php" method="POST">
                 <div class="modal-body">
-                    <form>
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                <label for="courseCode" class="form-label">Código del Curso</label>
-                                <input type="text" class="form-control" id="courseCode" required>
-                            </div>
-                            <div class="col-md-6">
-                                <label for="courseName" class="form-label">Nombre del Curso</label>
-                                <input type="text" class="form-control" id="courseName" required>
-                            </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="courseCode" class="form-label">Código del Curso</label>
+                            <input type="text" class="form-control" id="courseCode" name="courseCode" placeholder="Ej: MAT-1P-A" required>
                         </div>
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                <label for="courseGrade" class="form-label">Grado</label>
-                                <select class="form-select" id="courseGrade" required>
-                                    <option value="" selected disabled>Seleccionar grado</option>
-                                    <option value="1p">1° Primaria</option>
-                                    <option value="2p">2° Primaria</option>
-                                    <option value="3p">3° Primaria</option>
-                                    <option value="4p">4° Primaria</option>
-                                    <option value="5p">5° Primaria</option>
-                                    <option value="6p">6° Primaria</option>
-                                    <option value="1s">1° Secundaria</option>
-                                    <option value="2s">2° Secundaria</option>
-                                    <option value="3s">3° Secundaria</option>
-                                    <option value="4s">4° Secundaria</option>
-                                    <option value="5s">5° Secundaria</option>
-                                    <option value="6s">6° Secundaria</option>
-                                </select>
-                            </div>
-                            <div class="col-md-6">
-                                <label for="courseSection" class="form-label">Sección</label>
-                                <select class="form-select" id="courseSection" required>
-                                    <option value="" selected disabled>Seleccionar sección</option>
-                                    <option value="A">A</option>
-                                    <option value="B">B</option>
-                                    <option value="C">C</option>
-                                    <option value="D">D</option>
-                                </select>
-                            </div>
+                        <div class="col-md-6">
+                            <label for="courseName" class="form-label">Nombre del Curso</label>
+                            <input type="text" class="form-control" id="courseName" name="courseName" placeholder="Ej: Álgebra Básica" required>
                         </div>
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                <label for="courseTeacher" class="form-label">Profesor</label>
-                                <select class="form-select" id="courseTeacher" required>
-                                    <option value="" selected disabled>Seleccionar profesor</option>
-                                    <option value="1">María López</option>
-                                    <option value="2">Carlos Rodríguez</option>
-                                    <option value="3">Ana Martínez</option>
-                                    <option value="4">Juan Pérez</option>
-                                    <option value="5">Laura Gómez</option>
-                                    <option value="6">Roberto Fernández</option>
-                                    <option value="7">Patricia Soto</option>
-                                </select>
-                            </div>
-                            <div class="col-md-6">
-                                <label for="courseSubject" class="form-label">Asignatura</label>
-                                <select class="form-select" id="courseSubject" required>
-                                    <option value="" selected disabled>Seleccionar asignatura</option>
-                                    <option value="math">Matemáticas</option>
-                                    <option value="language">Lenguaje</option>
-                                    <option value="science">Ciencias Naturales</option>
-                                    <option value="physics">Física</option>
-                                    <option value="chemistry">Química</option>
-                                    <option value="social">Ciencias Sociales</option>
-                                    <option value="history">Historia</option>
-                                    <option value="geography">Geografía</option>
-                                    <option value="english">Inglés</option>
-                                    <option value="pe">Educación Física</option>
-                                    <option value="arts">Artes</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                <label for="courseCapacity" class="form-label">Capacidad</label>
-                                <input type="number" class="form-control" id="courseCapacity" min="1" required>
-                            </div>
-                            <div class="col-md-6">
-                                <label for="courseCredits" class="form-label">Créditos</label>
-                                <input type="number" class="form-control" id="courseCredits" min="1" required>
-                            </div>
-                        </div>
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                <label for="courseStartDate" class="form-label">Fecha de Inicio</label>
-                                <input type="date" class="form-control" id="courseStartDate" required>
-                            </div>
-                            <div class="col-md-6">
-                                <label for="courseEndDate" class="form-label">Fecha de Finalización</label>
-                                <input type="date" class="form-control" id="courseEndDate" required>
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Horario</label>
-                            <div class="table-responsive">
-                                <table class="table table-bordered">
-                                    <thead class="table-academic">
-                                        <tr>
-                                            <th>Día</th>
-                                            <th>Hora de Inicio</th>
-                                            <th>Hora de Fin</th>
-                                            <th>Aula</th>
-                                            <th></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <tr>
-                                            <td>
-                                                <select class="form-select form-select-sm">
-                                                    <option value="monday">Lunes</option>
-                                                    <option value="tuesday">Martes</option>
-                                                    <option value="wednesday">Miércoles</option>
-                                                    <option value="thursday">Jueves</option>
-                                                    <option value="friday">Viernes</option>
-                                                </select>
-                                            </td>
-                                            <td><input type="time" class="form-control form-control-sm"></td>
-                                            <td><input type="time" class="form-control form-control-sm"></td>
-                                            <td><input type="text" class="form-control form-control-sm"></td>
-                                            <td><button type="button" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button></td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                            <div class="text-end mt-2">
-                                <button type="button" class="btn btn-sm btn-academic">
-                                    <i class="bi bi-plus-circle"></i> Agregar Horario
-                                </button>
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            <label for="courseDescription" class="form-label">Descripción</label>
-                            <textarea class="form-control" id="courseDescription" rows="3"></textarea>
-                        </div>
-                        <div class="mb-3">
-                            <label for="courseStatus" class="form-label">Estado</label>
-                            <select class="form-select" id="courseStatus" required>
-                                <option value="active" selected>Activo</option>
-                                <option value="inactive">Inactivo</option>
-                                <option value="pending">Pendiente</option>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="courseGrade" class="form-label">Grado</label>
+                            <select class="form-select" id="courseGrade" name="courseGrade" required>
+                                <option value="" selected disabled>Seleccionar grado</option>
+                                <option value="1P">1° Primaria</option>
+                                <option value="2P">2° Primaria</option>
+                                <option value="3P">3° Primaria</option>
+                                <option value="4P">4° Primaria</option>
+                                <option value="5P">5° Primaria</option>
+                                <option value="6P">6° Primaria</option>
+                                <option value="1S">1° Secundaria</option>
+                                <option value="2S">2° Secundaria</option>
+                                <option value="3S">3° Secundaria</option>
+                                <option value="4S">4° Secundaria</option>
+                                <option value="5S">5° Secundaria</option>
+                                <option value="6S">6° Secundaria</option>
                             </select>
                         </div>
-                    </form>
+                        <div class="col-md-6">
+                            <label for="courseSection" class="form-label">Sección</label>
+                            <select class="form-select" id="courseSection" name="courseSection" required>
+                                <option value="" selected disabled>Seleccionar sección</option>
+                                <option value="A">A</option>
+                                <option value="B">B</option>
+                                <option value="C">C</option>
+                                <option value="D">D</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="courseTeacher" class="form-label">Profesor</label>
+                            <select class="form-select" id="courseTeacher" name="courseTeacher" required>
+                                <option value="" selected disabled>Seleccionar profesor</option>
+                                <?php foreach ($profesores as $profesor): ?>
+                                    <option value="<?php echo $profesor['id']; ?>">
+                                        <?php echo htmlspecialchars($profesor['nombre'] . ' ' . $profesor['apellido']); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="courseSubject" class="form-label">Materia</label>
+                             <select class="form-select" id="courseSubject" name="courseSubject" required>
+                                <option value="" selected disabled>Seleccionar materia</option>
+                                <?php foreach ($materias as $materia): ?>
+                                    <option value="<?php echo $materia['id']; ?>">
+                                        <?php echo htmlspecialchars($materia['nombre']); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="courseCapacity" class="form-label">Capacidad (N° de Estudiantes)</label>
+                            <input type="number" class="form-control" id="courseCapacity" name="courseCapacity" min="1" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="courseCredits" class="form-label">Créditos</label>
+                            <input type="number" class="form-control" id="courseCredits" name="courseCredits" min="0" step="1" required>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="courseStartDate" class="form-label">Fecha de Inicio</label>
+                            <input type="date" class="form-control" id="courseStartDate" name="courseStartDate" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="courseEndDate" class="form-label">Fecha de Finalización</label>
+                            <input type="date" class="form-control" id="courseEndDate" name="courseEndDate" required>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="courseDescription" class="form-label">Descripción</label>
+                        <textarea class="form-control" id="courseDescription" name="courseDescription" rows="3"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label for="courseStatus" class="form-label">Estado</label>
+                        <select class="form-select" id="courseStatus" name="courseStatus" required>
+                            <option value="Activo" selected>Activo</option>
+                            <option value="Pendiente">Pendiente</option>
+                            <option value="Inactivo">Inactivo</option>
+                        </select>
+                    </div>
+                    <!-- NOTA: La sección de 'Horario' es más compleja.
+                         Normalmente, esto se guardaría en una tabla separada 'horarios' vinculada al 'curso_id'.
+                         Por ahora, este formulario no enviará datos de horario. -->
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="button" class="btn btn-academic">Guardar</button>
+                    <!-- El botón de guardar ahora es de tipo submit -->
+                    <button type="submit" class="btn btn-academic">Guardar Curso</button>
                 </div>
-            </div>
+            </form>
+            <!-- FIN DEL FORMULARIO MODIFICADO -->
         </div>
     </div>
+</div>
 
     <!-- Scripts -->
     <script src="../js/jquery-3.3.1.min.js"></script>
