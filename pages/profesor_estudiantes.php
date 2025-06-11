@@ -10,17 +10,99 @@ if (empty($_SESSION['user_id'])) {
 // Conexión
 require_once '../config.php';
 
-// Obtener nombre y apellido
+$profesor_user_id = $_SESSION['user_id'];
+
+// 1. OBTENER DATOS BÁSICOS DEL PROFESOR
 $stmt = $mysqli->prepare("
-    SELECT nombre, apellido
-      FROM usuarios
-     WHERE id = ?
+    SELECT p.id as profesor_id, u.nombre, u.apellido
+      FROM usuarios u
+      JOIN profesores p ON u.id = p.usuario_id
+     WHERE u.id = ?
 ");
-$stmt->bind_param('i', $_SESSION['user_id']);
+$stmt->bind_param('i', $profesor_user_id);
 $stmt->execute();
-$stmt->bind_result($nombre, $apellido);
-$stmt->fetch();
+$result = $stmt->get_result();
+$profesor_data = $result->fetch_assoc();
+$profesor_id = $profesor_data['profesor_id'];
+$nombre = $profesor_data['nombre'];
+$apellido = $profesor_data['apellido'];
 $stmt->close();
+
+// 2. OBTENER LOS CURSOS QUE IMPARTE EL PROFESOR (PARA LOS FILTROS)
+$cursos_profesor = [];
+$stmt_cursos = $mysqli->prepare("
+    SELECT c.id, c.nombre as curso_nombre, g.nombre as grado_nombre
+    FROM cursos c
+    JOIN grados g ON c.grado_id = g.id
+    WHERE c.profesor_id = ? AND c.estatus = 'Activo'
+    ORDER BY g.id, c.nombre
+");
+$stmt_cursos->bind_param('i', $profesor_id);
+$stmt_cursos->execute();
+$result_cursos = $stmt_cursos->get_result();
+while ($row = $result_cursos->fetch_assoc()) {
+    $cursos_profesor[] = $row;
+}
+$stmt_cursos->close();
+
+// 3. LÓGICA DE FILTRADO Y BÚSQUEDA
+$curso_filtrado_id = $_GET['curso_id'] ?? null;
+$where_clause = "";
+$params = [$profesor_id];
+$types = 'i';
+
+if (!empty($curso_filtrado_id) && is_numeric($curso_filtrado_id)) {
+    $where_clause .= " AND c.id = ?";
+    $params[] = $curso_filtrado_id;
+    $types .= 'i';
+}
+
+// 4. OBTENER LA LISTA DE ESTUDIANTES DE LOS CURSOS DEL PROFESOR
+// Esta es una consulta compleja que une múltiples tablas para obtener toda la información necesaria.
+$estudiantes = [];
+$sql_estudiantes = "
+    SELECT 
+        e.id as estudiante_id,
+        u.nombre, 
+        u.apellido,
+        e.codigo_estudiante,
+        c.nombre as nombre_curso,
+        g.nombre as nombre_grado,
+        e.estado,
+        -- Subconsulta para calcular el promedio general del estudiante en los cursos del profesor
+        (SELECT AVG(cal.calificacion) 
+         FROM calificaciones cal
+         JOIN matriculas m_cal ON cal.matricula_id = m_cal.id
+         JOIN cursos c_cal ON m_cal.curso_id = c_cal.id
+         WHERE m_cal.estudiante_id = e.id AND c_cal.profesor_id = p.id) as promedio,
+        -- Subconsulta para calcular el porcentaje de asistencia
+        (SELECT (COUNT(CASE WHEN a.estado IN ('Presente', 'Tarde') THEN 1 END) / COUNT(*)) * 100 
+         FROM asistencia a
+         JOIN matriculas m_asi ON a.matricula_id = m_asi.id
+         WHERE m_asi.estudiante_id = e.id) as asistencia_porcentaje
+    FROM estudiantes e
+    JOIN usuarios u ON e.usuario_id = u.id
+    JOIN grados g ON e.grado_id = g.id
+    JOIN matriculas m ON e.id = m.estudiante_id
+    JOIN cursos c ON m.curso_id = c.id
+    JOIN profesores p ON c.profesor_id = p.id
+    WHERE p.id = ? {$where_clause}
+    GROUP BY e.id
+    ORDER BY u.apellido, u.nombre
+";
+
+$stmt_estudiantes = $mysqli->prepare($sql_estudiantes);
+// bind_param necesita que los parámetros se pasen por referencia
+if (!empty($params)) {
+    $stmt_estudiantes->bind_param($types, ...$params);
+}
+$stmt_estudiantes->execute();
+$result_estudiantes = $stmt_estudiantes->get_result();
+while ($row = $result_estudiantes->fetch_assoc()) {
+    $estudiantes[] = $row;
+}
+$stmt_estudiantes->close();
+
 include __DIR__ . '/side_bar_profesor.php';
 ?>
 <!DOCTYPE html>
@@ -64,220 +146,116 @@ include __DIR__ . '/side_bar_profesor.php';
                 </div>
 
                 <!-- Search and Filter -->
-                <div class="row mb-4">
-                    <div class="col-md-6">
-                        <div class="input-group">
-                            <input type="text" class="form-control" placeholder="Buscar estudiante por nombre, ID o curso...">
-                            <button class="btn btn-academic" type="button">
-                                <i class="bi bi-search"></i> Buscar
-                            </button>
-                        </div>
-                    </div>
-                    <div class="col-md-6 text-end">
-                        <div class="btn-group me-2">
-                            <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="bi bi-funnel"></i> Filtrar por Curso
-                            </button>
-                            <ul class="dropdown-menu">
-                                <li><a class="dropdown-item" href="#">Todos los cursos</a></li>
-                                <li><a class="dropdown-item" href="#">Matemáticas - 6° Secundaria</a></li>
-                                <li><a class="dropdown-item" href="#">Matemáticas - 5° Secundaria</a></li>
-                                <li><a class="dropdown-item" href="#">Física - 6° Secundaria</a></li>
-                                <li><a class="dropdown-item" href="#">Física - 5° Secundaria</a></li>
-                                <li><a class="dropdown-item" href="#">Química - 6° Secundaria</a></li>
-                                <li><a class="dropdown-item" href="#">Química - 5° Secundaria</a></li>
-                            </ul>
-                        </div>
-                        <div class="btn-group">
-                            <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="bi bi-sort-down"></i> Ordenar por
-                            </button>
-                            <ul class="dropdown-menu">
-                                <li><a class="dropdown-item" href="#">Nombre (A-Z)</a></li>
-                                <li><a class="dropdown-item" href="#">Nombre (Z-A)</a></li>
-                                <li><a class="dropdown-item" href="#">Promedio (Mayor a menor)</a></li>
-                                <li><a class="dropdown-item" href="#">Promedio (Menor a mayor)</a></li>
-                                <li><a class="dropdown-item" href="#">Asistencia (Mayor a menor)</a></li>
-                                <li><a class="dropdown-item" href="#">Asistencia (Menor a mayor)</a></li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
+<!-- Search and Filter -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <!-- El campo de búsqueda requeriría más lógica para implementarse completamente -->
+        <div class="input-group">
+            <input type="text" class="form-control" placeholder="Buscar estudiante por nombre, ID...">
+            <button class="btn btn-academic" type="button">
+                <i class="bi bi-search"></i> Buscar
+            </button>
+        </div>
+    </div>
+    <div class="col-md-6 text-end">
+        <div class="btn-group me-2">
+            <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="bi bi-funnel"></i> Filtrar por Curso
+            </button>
+            <ul class="dropdown-menu">
+                <!-- Opción para ver todos los estudiantes del profesor -->
+                <li><a class="dropdown-item" href="profesor_estudiantes.php">Todos los cursos</a></li>
+                <!-- Bucle para mostrar los cursos del profesor -->
+                <?php foreach ($cursos_profesor as $curso): ?>
+                    <li>
+                        <a class="dropdown-item" href="profesor_estudiantes.php?curso_id=<?php echo $curso['id']; ?>">
+                            <?php echo htmlspecialchars($curso['curso_nombre'] . ' - ' . $curso['grado_nombre']); ?>
+                        </a>
+                    </li>
+                <?php endforeach; ?>
+            </ul>
+        </div>
+        <!-- El dropdown de ordenar también se puede hacer dinámico con parámetros GET -->
+        <div class="btn-group">
+            <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="bi bi-sort-down"></i> Ordenar por
+            </button>
+            <ul class="dropdown-menu">
+                <li><a class="dropdown-item" href="#">Nombre (A-Z)</a></li>
+                <li><a class="dropdown-item" href="#">Promedio (Mayor a menor)</a></li>
+            </ul>
+        </div>
+    </div>
+</div>
 
                 <!-- Students Table -->
-                <div class="card mb-4">
-                    <div class="card-header card-header-academic">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0 text-white">Lista de Estudiantes</h5>
-                            
-                        </div>
-                    </div>
-                    <div class="card-body">
-                        <div class="table-responsive">
-                            <table class="table table-hover">
-                                <thead class="table-academic">
-                                    <tr>
-                                        <th>ID</th>
-                                        <th>Nombre</th>
-                                        <th>Curso</th>
-                                        <th>Grado</th>
-                                        <th>Promedio</th>
-                                        <th>Asistencia</th>
-                                        <th>Estado</th>
-                                        <th>Acciones</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td>EST-001</td>
-                                        <td>Alejandro Gómez</td>
-                                        <td>Matemáticas</td>
-                                        <td>6° Secundaria</td>
-                                        <td>86.6</td>
-                                        <td>95%</td>
-                                        <td><span class="badge bg-success">Activo</span></td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#studentDetailModal"><i class="bi bi-eye"></i></button>
-                                            <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></button>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>EST-002</td>
-                                        <td>Carla Mendoza</td>
-                                        <td>Matemáticas</td>
-                                        <td>6° Secundaria</td>
-                                        <td>93.4</td>
-                                        <td>98%</td>
-                                        <td><span class="badge bg-success">Activo</span></td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></button>
-                                            <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></button>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>EST-003</td>
-                                        <td>Daniel Flores</td>
-                                        <td>Matemáticas</td>
-                                        <td>6° Secundaria</td>
-                                        <td>70.0</td>
-                                        <td>85%</td>
-                                        <td><span class="badge bg-warning">En observación</span></td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></button>
-                                            <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></button>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>EST-004</td>
-                                        <td>Elena Vargas</td>
-                                        <td>Matemáticas</td>
-                                        <td>6° Secundaria</td>
-                                        <td>82.6</td>
-                                        <td>92%</td>
-                                        <td><span class="badge bg-success">Activo</span></td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></button>
-                                            <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></button>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>EST-005</td>
-                                        <td>Fernando Quispe</td>
-                                        <td>Matemáticas</td>
-                                        <td>6° Secundaria</td>
-                                        <td>60.0</td>
-                                        <td>78%</td>
-                                        <td><span class="badge bg-danger">En riesgo</span></td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></button>
-                                            <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></button>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>EST-006</td>
-                                        <td>Gabriela Mamani</td>
-                                        <td>Matemáticas</td>
-                                        <td>5° Secundaria</td>
-                                        <td>88.5</td>
-                                        <td>96%</td>
-                                        <td><span class="badge bg-success">Activo</span></td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></button>
-                                            <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></button>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>EST-007</td>
-                                        <td>Hugo Condori</td>
-                                        <td>Matemáticas</td>
-                                        <td>5° Secundaria</td>
-                                        <td>75.8</td>
-                                        <td>88%</td>
-                                        <td><span class="badge bg-success">Activo</span></td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></button>
-                                            <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></button>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>EST-008</td>
-                                        <td>Isabel Choque</td>
-                                        <td>Física</td>
-                                        <td>6° Secundaria</td>
-                                        <td>84.2</td>
-                                        <td>93%</td>
-                                        <td><span class="badge bg-success">Activo</span></td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></button>
-                                            <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></button>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>EST-009</td>
-                                        <td>Jorge Apaza</td>
-                                        <td>Física</td>
-                                        <td>6° Secundaria</td>
-                                        <td>72.5</td>
-                                        <td>85%</td>
-                                        <td><span class="badge bg-warning">En observación</span></td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></button>
-                                            <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></button>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>EST-010</td>
-                                        <td>Karen Huanca</td>
-                                        <td>Química</td>
-                                        <td>5° Secundaria</td>
-                                        <td>90.1</td>
-                                        <td>97%</td>
-                                        <td><span class="badge bg-success">Activo</span></td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></button>
-                                            <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></button>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                        <nav aria-label="Page navigation">
-                            <ul class="pagination justify-content-center">
-                                <li class="page-item disabled">
-                                    <a class="page-link" href="#" tabindex="-1" aria-disabled="true">Anterior</a>
-                                </li>
-                                <li class="page-item active"><a class="page-link" href="#">1</a></li>
-                                <li class="page-item"><a class="page-link" href="#">2</a></li>
-                                <li class="page-item"><a class="page-link" href="#">3</a></li>
-                                <li class="page-item"><a class="page-link" href="#">4</a></li>
-                                <li class="page-item"><a class="page-link" href="#">5</a></li>
-                                <li class="page-item">
-                                    <a class="page-link" href="#">Siguiente</a>
-                                </li>
-                            </ul>
-                        </nav>
-                    </div>
-                </div>
+
+<div class="card mb-4">
+    <div class="card-header card-header-academic">
+        <div class="d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 text-white">Lista de Estudiantes (<?php echo count($estudiantes); ?>)</h5>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead class="table-academic">
+                    <tr>
+                        <th>ID Estudiante</th>
+                        <th>Nombre</th>
+                        <th>Curso Actual</th>
+                        <th>Grado</th>
+                        <th>Promedio</th>
+                        <th>Asistencia</th>
+                        <th>Estado</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php if (empty($estudiantes)): ?>
+                        <tr>
+                            <td colspan="8" class="text-center">No se encontraron estudiantes para los cursos seleccionados.</td>
+                        </tr>
+                    <?php else: ?>
+                        <?php foreach ($estudiantes as $estudiante): ?>
+                            <tr>
+                                <td><?php echo htmlspecialchars($estudiante['codigo_estudiante']); ?></td>
+                                <td><?php echo htmlspecialchars($estudiante['nombre'] . ' ' . $estudiante['apellido']); ?></td>
+                                <td><?php echo htmlspecialchars($estudiante['nombre_curso']); ?></td>
+                                <td><?php echo htmlspecialchars($estudiante['nombre_grado']); ?></td>
+                                <td><?php echo number_format($estudiante['promedio'] ?? 0, 1); ?></td>
+                                <td><?php echo number_format($estudiante['asistencia_porcentaje'] ?? 0, 0); ?>%</td>
+                                <td>
+                                    <?php 
+                                        $estado = $estudiante['estado'];
+                                        $badge_class = 'bg-secondary';
+                                        if ($estado == 'Activo') $badge_class = 'bg-success';
+                                        if ($estado == 'Suspendido') $badge_class = 'bg-warning';
+                                        if ($estado == 'Inactivo') $badge_class = 'bg-danger';
+                                    ?>
+                                    <span class="badge <?php echo $badge_class; ?>"><?php echo htmlspecialchars($estado); ?></span>
+                                </td>
+                                <td>
+                                    <!-- Importante: Añadimos data-estudiante-id para el modal -->
+                                    <button class="btn btn-sm btn-outline-primary btn-view-details" 
+                                            data-bs-toggle="modal" 
+                                            data-bs-target="#studentDetailModal"
+                                            data-estudiante-id="<?php echo $estudiante['estudiante_id']; ?>">
+                                        <i class="bi bi-eye"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-secondary">
+                                        <i class="bi bi-chat-dots"></i> <!-- Botón para enviar mensaje/nota -->
+                                    </button>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+        <!-- La paginación necesitaría más lógica para ser completamente dinámica -->
+    </div>
+</div>
 
                 <!-- Student Statistics -->
                 <div class="row mb-4">
@@ -1106,5 +1084,110 @@ include __DIR__ . '/side_bar_profesor.php';
     <!-- Scripts -->
     <script src="../js/jquery-3.3.1.min.js"></script>
     <script src="../js/bootstrap.bundle.min.js"></script>
+    <!-- ... (resto del HTML y el modal) ... -->
+
+
+    <script>
+    $(document).ready(function() {
+        // Evento que se dispara cuando se hace clic en el botón de ver detalles
+        $('.btn-view-details').on('click', function() {
+            var estudianteId = $(this).data('estudiante-id');
+            var modal = $('#studentDetailModal');
+
+            // Mostrar un estado de carga mientras se obtienen los datos
+            modal.find('.modal-body').html('<div class="text-center p-5"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Cargando...</span></div></div>');
+            
+            // Petición AJAX para obtener los detalles del estudiante
+            $.ajax({
+                url: 'ajax/obtener_detalles_estudiante.php',
+                type: 'GET',
+                data: { estudiante_id: estudianteId },
+                dataType: 'json',
+                success: function(response) {
+                    if (response.error) {
+                        modal.find('.modal-body').html('<p class="text-danger">' + response.error + '</p>');
+                        return;
+                    }
+
+                    // Restaurar el HTML original del modal (puedes tenerlo en una variable o re-crearlo)
+                    // Por simplicidad aquí, lo vamos a construir dinámicamente.
+                    // Esto es una versión simplificada de lo que se podría hacer para llenar todas las pestañas.
+                    
+                    var perfil = response.perfil;
+                    
+                    // Actualizar el título del modal
+                    modal.find('.modal-title').text('Detalles del Estudiante: ' + perfil.nombre + ' ' + perfil.apellido);
+                    
+                    // Aquí recreamos el contenido del modal con los datos obtenidos.
+                    // ESTO ES UN EJEMPLO PARA LA PESTAÑA DE PERFIL. Deberías hacer lo mismo para las otras pestañas.
+                    var profileHtml = `
+                    <ul class="nav nav-tabs" id="studentTab" role="tablist">
+                        <li class="nav-item" role="presentation"><button class="nav-link active" id="profile-tab" data-bs-toggle="tab" data-bs-target="#profile" type="button" role="tab" aria-controls="profile" aria-selected="true">Perfil</button></li>
+                        <li class="nav-item" role="presentation"><button class="nav-link" id="grades-tab" data-bs-toggle="tab" data-bs-target="#grades" type="button" role="tab" aria-controls="grades" aria-selected="false">Calificaciones</button></li>
+                        <li class="nav-item" role="presentation"><button class="nav-link" id="attendance-tab" data-bs-toggle="tab" data-bs-target="#attendance" type="button" role="tab" aria-controls="attendance" aria-selected="false">Asistencia</button></li>
+                    </ul>
+                    <div class="tab-content pt-3" id="studentTabContent">
+                        <div class="tab-pane fade show active" id="profile" role="tabpanel" aria-labelledby="profile-tab">
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <div class="text-center mb-4">
+                                        <img src="${perfil.foto_perfil || 'https://via.placeholder.com/150'}" class="rounded-circle img-thumbnail" alt="Foto de perfil">
+                                        <h4 class="mt-2">${perfil.nombre} ${perfil.apellido}</h4>
+                                        <p class="text-muted">${perfil.grado_nombre}</p>
+                                    </div>
+                                </div>
+                                <div class="col-md-8">
+                                    <h5>Información Personal</h5>
+                                    <p><strong>ID:</strong> ${perfil.codigo_estudiante}</p>
+                                    <p><strong>Fecha de nacimiento:</strong> ${perfil.fecha_nacimiento}</p>
+                                    <p><strong>Correo electrónico:</strong> ${perfil.email}</p>
+                                    <p><strong>Dirección:</strong> ${perfil.direccion}</p>
+                                    <h5 class="mt-3">Información de Contacto de Emergencia</h5>
+                                    <p><strong>Tutor:</strong> ${perfil.tutor_nombre}</p>
+                                    <p><strong>Teléfono del Tutor:</strong> ${perfil.tutor_telefono}</p>
+                                    <h5 class="mt-3">Observaciones</h5>
+                                    <p>${perfil.observaciones || 'No hay observaciones registradas.'}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="tab-pane fade" id="grades" role="tabpanel" aria-labelledby="grades-tab">
+                            <h5>Calificaciones Registradas</h5>
+                            <table class="table table-sm"><thead><tr><th>Curso</th><th>Evaluación</th><th>Nota</th></tr></thead><tbody>`;
+                    
+                    if(response.calificaciones.length > 0) {
+                        response.calificaciones.forEach(function(cal) {
+                            profileHtml += `<tr><td>${cal.curso_nombre}</td><td>${cal.evaluacion_titulo}</td><td>${cal.calificacion} / ${cal.puntaje_maximo}</td></tr>`;
+                        });
+                    } else {
+                        profileHtml += '<tr><td colspan="3" class="text-center">No hay calificaciones registradas.</td></tr>';
+                    }
+
+                    profileHtml += `</tbody></table></div>
+                        <div class="tab-pane fade" id="attendance" role="tabpanel" aria-labelledby="attendance-tab">
+                            <h5>Último Mes de Asistencia</h5>
+                            <table class="table table-sm"><thead><tr><th>Fecha</th><th>Curso</th><th>Estado</th></tr></thead><tbody>`;
+
+                    if(response.asistencia.length > 0) {
+                        response.asistencia.forEach(function(asis) {
+                            let badgeClass = 'bg-success';
+                            if(asis.estado === 'Tarde') badgeClass = 'bg-warning';
+                            if(asis.estado === 'Ausente') badgeClass = 'bg-danger';
+                            profileHtml += `<tr><td>${asis.fecha}</td><td>${asis.curso_nombre}</td><td><span class="badge ${badgeClass}">${asis.estado}</span></td></tr>`;
+                        });
+                    } else {
+                        profileHtml += '<tr><td colspan="3" class="text-center">No hay registros de asistencia en el último mes.</td></tr>';
+                    }
+                    
+                    profileHtml += `</tbody></table></div></div>`;
+                    
+                    modal.find('.modal-body').html(profileHtml);
+                },
+                error: function() {
+                    modal.find('.modal-body').html('<p class="text-danger">Error al cargar los datos. Inténtelo de nuevo.</p>');
+                }
+            });
+        });
+    });
+    </script>
 </body>
 </html>

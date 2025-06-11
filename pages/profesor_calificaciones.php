@@ -27,7 +27,7 @@ $cursos_profesor = [];
 $profesor_id = $_SESSION['user_id']; // El ID del profesor logueado
 
 $stmt_cursos = $mysqli->prepare("
-    SELECT id, nombre, grado, seccion 
+    SELECT id, nombre, grado_id, seccion 
     FROM cursos 
     WHERE profesor_id = ? AND estatus = 'Activo'
     ORDER BY nombre, grado
