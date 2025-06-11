@@ -1,36 +1,151 @@
 <?php
 session_start();
 
-// Si no hay sesión activa, volvemos al login
 if (empty($_SESSION['user_id'])) {
     header('Location: ../index.php');
     exit;
 }
 
-// Conexión
 require_once '../config.php';
 
-// Obtener nombre y apellido
-$stmt = $mysqli->prepare("
-    SELECT nombre, apellido
-      FROM usuarios
-     WHERE id = ?
-");
-$stmt->bind_param('i', $_SESSION['user_id']);
-$stmt->execute();
-$stmt->bind_result($nombre, $apellido);
-$stmt->fetch();
-$stmt->close();
-include __DIR__ . '/side_bar_director.php';
+// --- INICIALIZACIÓN DE VARIABLES ---
+$nombre = '';
+$apellido = '';
+$grados_lista = [];
+$materias_lista = [];
+$profesores_lista = [];
+$stats_generales = ['excelente' => 0, 'bueno' => 0, 'regular' => 0, 'insuficiente' => 0, 'total_calificaciones' => 0];
+$promedio_niveles = ['Primaria' => 0, 'Secundaria' => 0, 'Total' => 0];
+$rendimiento_asignaturas = [];
+$report_title = "Reporte de Rendimiento Académico General"; // Título por defecto
 
+// --- OBTENER NOMBRE DEL DIRECTOR ---
+$stmt_director = $mysqli->prepare("SELECT nombre, apellido FROM usuarios WHERE id = ?");
+$stmt_director->bind_param('i', $_SESSION['user_id']);
+$stmt_director->execute();
+$stmt_director->bind_result($nombre, $apellido);
+$stmt_director->fetch();
+$stmt_director->close();
+
+// --- CARGAR DATOS PARA DROPDOWNS ---
+if ($result = $mysqli->query("SELECT id, nombre FROM grados ORDER BY id")) { while ($row = $result->fetch_assoc()) $grados_lista[] = $row; $result->free(); }
+if ($result = $mysqli->query("SELECT id, nombre FROM materias ORDER BY nombre")) { while ($row = $result->fetch_assoc()) $materias_lista[] = $row; $result->free(); }
+if ($result = $mysqli->query("SELECT p.id, u.nombre, u.apellido FROM profesores p JOIN usuarios u ON p.usuario_id = u.id ORDER BY u.apellido")) { while ($row = $result->fetch_assoc()) $profesores_lista[] = $row; $result->free(); }
+
+// --- INICIO: PROCESAMIENTO DE FILTROS ---
+$filtro_grado_id = isset($_GET['grado']) && !empty($_GET['grado']) ? (int)$_GET['grado'] : 0;
+$filtro_materia_id = isset($_GET['materia']) && !empty($_GET['materia']) ? (int)$_GET['materia'] : 0;
+$filtro_profesor_id = isset($_GET['profesor']) && !empty($_GET['profesor']) ? (int)$_GET['profesor'] : 0;
+
+$where_clauses = [];
+$params = [];
+$param_types = '';
+$report_title_parts = [];
+
+if ($filtro_grado_id > 0) {
+    $where_clauses[] = "c.grado_id = ?";
+    $params[] = $filtro_grado_id;
+    $param_types .= 'i';
+    // Buscar el nombre del grado para el título del reporte
+    foreach($grados_lista as $g) { if($g['id'] == $filtro_grado_id) {$report_title_parts[] = "Grado: " . $g['nombre']; break;} }
+}
+if ($filtro_materia_id > 0) {
+    $where_clauses[] = "c.materia_id = ?";
+    $params[] = $filtro_materia_id;
+    $param_types .= 'i';
+    foreach($materias_lista as $m) { if($m['id'] == $filtro_materia_id) {$report_title_parts[] = "Materia: " . $m['nombre']; break;} }
+}
+if ($filtro_profesor_id > 0) {
+    $where_clauses[] = "c.profesor_id = ?";
+    $params[] = $filtro_profesor_id;
+    $param_types .= 'i';
+    foreach($profesores_lista as $p) { if($p['id'] == $filtro_profesor_id) {$report_title_parts[] = "Profesor: " . $p['apellido']; break;} }
+}
+
+// Unir cláusulas para la consulta SQL
+$where_sql = count($where_clauses) > 0 ? " WHERE " . implode(" AND ", $where_clauses) : "";
+if(!empty($report_title_parts)){ $report_title = "Reporte Específico - " . implode(' | ', $report_title_parts); }
+
+// --- CONSULTAS DINÁMICAS BASADAS EN FILTROS ---
+
+// 3. ESTADÍSTICAS GENERALES DE CALIFICACIONES (TARJETAS)
+$sql_stats_generales = "
+    SELECT 
+        SUM(CASE WHEN cal.calificacion >= 90 THEN 1 ELSE 0 END) AS excelente,
+        SUM(CASE WHEN cal.calificacion >= 75 AND cal.calificacion < 90 THEN 1 ELSE 0 END) AS bueno,
+        SUM(CASE WHEN cal.calificacion >= 60 AND cal.calificacion < 75 THEN 1 ELSE 0 END) AS regular,
+        SUM(CASE WHEN cal.calificacion < 60 THEN 1 ELSE 0 END) AS insuficiente,
+        COUNT(cal.id) as total_calificaciones
+    FROM calificaciones cal
+    JOIN evaluaciones ev ON cal.evaluacion_id = ev.id
+    JOIN cursos c ON ev.curso_id = c.id
+    $where_sql";
+$stmt_stats = $mysqli->prepare($sql_stats_generales);
+if(!empty($params)) { $stmt_stats->bind_param($param_types, ...$params); }
+$stmt_stats->execute();
+if($result = $stmt_stats->get_result()){ $stats_generales = $result->fetch_assoc(); $result->free(); }
+$stmt_stats->close();
+
+
+// 4. PROMEDIO GENERAL POR NIVEL (con filtros)
+$sql_prom_niveles = "
+    SELECT g.nivel, AVG(cal.calificacion) as promedio
+    FROM calificaciones cal
+    JOIN evaluaciones ev ON cal.evaluacion_id = ev.id
+    JOIN cursos c ON ev.curso_id = c.id
+    JOIN grados g ON c.grado_id = g.id
+    $where_sql
+    GROUP BY g.nivel";
+$stmt_prom = $mysqli->prepare($sql_prom_niveles);
+if(!empty($params)) { $stmt_prom->bind_param($param_types, ...$params); }
+$stmt_prom->execute();
+if($result = $stmt_prom->get_result()){
+    while($row = $result->fetch_assoc()){ $promedio_niveles[$row['nivel']] = $row['promedio']; }
+    $result->free();
+}
+$stmt_prom->close();
+// Calcular el promedio total (con filtros)
+$sql_prom_total = "SELECT AVG(cal.calificacion) FROM calificaciones cal JOIN evaluaciones ev ON cal.evaluacion_id = ev.id JOIN cursos c ON ev.curso_id = c.id $where_sql";
+$stmt_prom_total = $mysqli->prepare($sql_prom_total);
+if(!empty($params)) { $stmt_prom_total->bind_param($param_types, ...$params); }
+$stmt_prom_total->execute();
+if($result = $stmt_prom_total->get_result()){ $promedio_niveles['Total'] = $result->fetch_row()[0]; $result->free(); }
+$stmt_prom_total->close();
+
+
+// 5. RENDIMIENTO POR ASIGNATURA (con filtros)
+$sql_rend_asig = "
+    SELECT m.nombre, AVG(cal.calificacion) as promedio,
+           SUM(CASE WHEN cal.calificacion >= 60 THEN 1 ELSE 0 END) as aprobados,
+           SUM(CASE WHEN cal.calificacion < 60 THEN 1 ELSE 0 END) as reprobados,
+           COUNT(cal.id) as total
+    FROM calificaciones cal
+    JOIN evaluaciones ev ON cal.evaluacion_id = ev.id
+    JOIN cursos c ON ev.curso_id = c.id
+    JOIN materias m ON c.materia_id = m.id
+    $where_sql
+    GROUP BY m.id ORDER BY m.nombre";
+$stmt_rend = $mysqli->prepare($sql_rend_asig);
+if(!empty($params)) { $stmt_rend->bind_param($param_types, ...$params); }
+$stmt_rend->execute();
+if($result = $stmt_rend->get_result()){
+    while($row = $result->fetch_assoc()) $rendimiento_asignaturas[] = $row;
+    $result->free();
+}
+$stmt_rend->close();
+
+
+// --- FIN LÓGICA ---
+include __DIR__ . '/side_bar_director.php';
 ?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
+    <!-- ... tu <head> ... -->
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Sistema Académico - Reportes Director</title>
+    <title>Sistema Académico - Reportes</title>
     <link href="../css/bootstrap.min.css" rel="stylesheet">
     <link href="../css/academic.css" rel="stylesheet" type="text/css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css">
@@ -38,370 +153,118 @@ include __DIR__ . '/side_bar_director.php';
 <body>
     <div class="container-fluid">
         <div class="row">
-            
-
-            <!-- Main content -->
             <div class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
                 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
                     <h1 class="h2">Reportes Académicos</h1>
                     <div class="btn-toolbar mb-2 mb-md-0">
-                        <div class="position-relative me-3">
-                            <i class="bi bi-bell fs-4"></i>
-                            <span class="notification-badge">7</span>
-                        </div>
                         <div class="dropdown">
-                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="dropdownMenuButton" data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="bi bi-person-circle me-1"></i>
-                                <?php echo htmlspecialchars($nombre . ' ' . $apellido, ENT_QUOTES, 'UTF-8'); ?>
+                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                <i class="bi bi-person-circle me-1"></i><?php echo htmlspecialchars($nombre . ' ' . $apellido); ?>
                             </button>
-                            <ul class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+                            <ul class="dropdown-menu dropdown-menu-end">
                                 <li><a class="dropdown-item" href="director_perfil.php">Mi Perfil</a></li>
-                                <li><a class="dropdown-item" href="director_configuracion.php">Configuración</a></li>
-                                <li><hr class="dropdown-divider"></li>
                                 <li><a class="dropdown-item" href="../index.php">Cerrar Sesión</a></li>
                             </ul>
                         </div>
                     </div>
                 </div>
 
-                <!-- Report Filters -->
                 <div class="card mb-4">
-                    <div class="card-header card-header-academic">
-                        <h5 class="mb-0 text-white">Filtros de Reportes</h5>
-                    </div>
+                    <div class="card-header card-header-academic"><h5 class="mb-0 text-white">Filtros de Reportes</h5></div>
                     <div class="card-body">
-                        <form>
-                            <div class="row mb-3">
-                                <div class="col-md-4">
-                                    <label for="reportType" class="form-label">Tipo de Reporte</label>
-                                    <select class="form-select" id="reportType">
-                                        <option value="academic" selected>Rendimiento Académico</option>
-                                        <option value="attendance">Asistencia</option>
-                                        <option value="enrollment">Matrícula</option>
-                                        <option value="teacher">Desempeño Docente</option>
-                                        <option value="financial">Financiero</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-4">
-                                    <label for="reportPeriod" class="form-label">Período</label>
-                                    <select class="form-select" id="reportPeriod">
-                                        <option value="current" selected>Semestre Actual (2025-1)</option>
-                                        <option value="previous">Semestre Anterior (2024-2)</option>
-                                        <option value="year">Año Académico 2024-2025</option>
-                                        <option value="custom">Personalizado</option>
-                                    </select>
-                                </div>
-                                
-                            </div>
-                            <div class="row mb-3">
-                                <div class="col-md-4">
+                        <form method="GET" action="">
+                            <div class="row mb-3 align-items-end">
+                                <div class="col-md-3">
                                     <label for="reportGrade" class="form-label">Grado/Nivel</label>
-                                    <select class="form-select" id="reportGrade">
-                                        <option value="all" selected>Todos</option>
-                                        <option value="primary">Primaria</option>
-                                        <option value="secondary">Secundaria</option>
-                                        <option value="grade1">1° Grado</option>
-                                        <option value="grade2">2° Grado</option>
-                                        <option value="grade3">3° Grado</option>
-                                        <option value="grade4">4° Grado</option>
-                                        <option value="grade5">5° Grado</option>
-                                        <option value="grade6">6° Grado</option>
+                                    <select class="form-select" name="grado">
+                                        <option value="">Todos</option>
+                                        <?php foreach($grados_lista as $grado): ?><option value="<?php echo $grado['id']; ?>" <?php if($filtro_grado_id == $grado['id']) echo 'selected'; ?>><?php echo htmlspecialchars($grado['nombre']); ?></option><?php endforeach; ?>
                                     </select>
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-md-3">
                                     <label for="reportSubject" class="form-label">Asignatura</label>
-                                    <select class="form-select" id="reportSubject">
-                                        <option value="all" selected>Todas</option>
-                                        <option value="math">Matemáticas</option>
-                                        <option value="language">Lenguaje</option>
-                                        <option value="science">Ciencias Naturales</option>
-                                        <option value="social">Ciencias Sociales</option>
-                                        <option value="english">Inglés</option>
-                                        <option value="pe">Educación Física</option>
-                                        <option value="arts">Artes</option>
+                                    <select class="form-select" name="materia">
+                                        <option value="">Todas</option>
+                                        <?php foreach($materias_lista as $materia): ?><option value="<?php echo $materia['id']; ?>" <?php if($filtro_materia_id == $materia['id']) echo 'selected'; ?>><?php echo htmlspecialchars($materia['nombre']); ?></option><?php endforeach; ?>
                                     </select>
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-md-3">
                                     <label for="reportTeacher" class="form-label">Profesor</label>
-                                    <select class="form-select" id="reportTeacher">
-                                        <option value="all" selected>Todos</option>
-                                        <option value="1">María López</option>
-                                        <option value="2">Carlos Rodríguez</option>
-                                        <option value="3">Ana Martínez</option>
-                                        <option value="4">Juan Pérez</option>
-                                        <option value="5">Laura Gómez</option>
+                                    <select class="form-select" name="profesor">
+                                        <option value="">Todos</option>
+                                        <?php foreach($profesores_lista as $profesor): ?><option value="<?php echo $profesor['id']; ?>" <?php if($filtro_profesor_id == $profesor['id']) echo 'selected'; ?>><?php echo htmlspecialchars($profesor['apellido'].', '.$profesor['nombre']); ?></option><?php endforeach; ?>
                                     </select>
                                 </div>
-                            </div>
-                            <div class="text-end">
-                                <button type="button" class="btn btn-academic">Generar Reporte</button>
+                                <div class="col-md-3">
+                                    <button type="submit" class="btn btn-academic w-100"><i class="bi bi-bar-chart-line-fill"></i> Generar Reporte</button>
+                                </div>
                             </div>
                         </form>
                     </div>
                 </div>
 
-                <!-- Recent Reports -->
-                <div class="card mb-4">
-                    <div class="card-header card-header-academic">
-                        <h5 class="mb-0 text-white">Reportes Recientes</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="table-responsive">
-                            <table class="table table-hover">
-                                <thead class="table-academic">
-                                    <tr>
-                                        <th>Nombre del Reporte</th>
-                                        <th>Tipo</th>
-                                        <th>Fecha de Generación</th>
-                                        <th>Generado por</th>
-                                        <th>Acciones</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td>Rendimiento Académico - Semestre 2025-1</td>
-                                        <td>Académico</td>
-                                        <td>01/06/2025</td>
-                                        <td>Roberto Sánchez</td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></button>
-                                            <button class="btn btn-sm btn-outline-success"><i class="bi bi-download"></i></button>
-                                            
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>Asistencia Docente - Mayo 2025</td>
-                                        <td>Asistencia</td>
-                                        <td>28/05/2025</td>
-                                        <td>Roberto Sánchez</td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></button>
-                                            <button class="btn btn-sm btn-outline-success"><i class="bi bi-download"></i></button>
-                                            
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>Matrícula por Grado - 2025</td>
-                                        <td>Matrícula</td>
-                                        <td>15/05/2025</td>
-                                        <td>Sistema</td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></button>
-                                            <button class="btn btn-sm btn-outline-success"><i class="bi bi-download"></i></button>
-                                            
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>Evaluación Docente - Semestre 2024-2</td>
-                                        <td>Desempeño</td>
-                                        <td>10/02/2025</td>
-                                        <td>Roberto Sánchez</td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></button>
-                                            <button class="btn btn-sm btn-outline-success"><i class="bi bi-download"></i></button>
-                                            
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>Rendimiento por Asignatura - Matemáticas</td>
-                                        <td>Académico</td>
-                                        <td>05/02/2025</td>
-                                        <td>Sistema</td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></button>
-                                            <button class="btn btn-sm btn-outline-success"><i class="bi bi-download"></i></button>
-                                            
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
                 <!-- Report Preview -->
                 <div class="card mb-4">
-                    <div class="card-header card-header-academic">
-                        <h5 class="mb-0 text-white">Vista Previa: Rendimiento Académico - Unidad Educativa Eduardo Abaroa</h5>
-                    </div>
+                    <div class="card-header card-header-academic"><h5 class="mb-0 text-white">Vista Previa: <?php echo htmlspecialchars($report_title); ?></h5></div>
                     <div class="card-body">
+                        <!-- ... (contenido de la vista previa) ... -->
                         <div class="row mb-4">
-                            <div class="col-12 text-center">
-                                <h4>Unidad Educativa Eduardo Avaroa III</h4>
-                                <p>El Alto, La Paz, Bolivia</p>
-                                <h5>Reporte de Rendimiento Académico - Semestre 2025-1</h5>
-                                <p>Fecha de generación: 01/06/2025</p>
+                            <div class="col-md-6">
+                                <div class="card h-100"><div class="card-header"><h6 class="mb-0">Promedio General por Nivel</h6></div>
+                                <div class="card-body"><div class="table-responsive"><table class="table table-sm">
+                                    <thead><tr><th>Nivel</th><th>Promedio</th></tr></thead>
+                                    <tbody>
+                                        <tr><td>Primaria</td><td><strong><?php echo number_format($promedio_niveles['Primaria'] ?? 0, 2); ?></strong></td></tr>
+                                        <tr><td>Secundaria</td><td><strong><?php echo number_format($promedio_niveles['Secundaria'] ?? 0, 2); ?></strong></td></tr>
+                                        <tr class="table-group-divider"><td class="fw-bold">Total General</td><td class="fw-bold"><?php echo number_format($promedio_niveles['Total'] ?? 0, 2); ?></td></tr>
+                                    </tbody>
+                                </table></div></div></div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card h-100"><div class="card-header"><h6 class="mb-0">Distribución de Calificaciones</h6></div>
+                                <div class="card-body"><div class="table-responsive"><table class="table table-sm">
+                                    <thead><tr><th>Rango</th><th>Calificaciones</th><th>Porcentaje</th></tr></thead>
+                                    <tbody>
+                                        <tr><td>90-100 (Excelente)</td><td><?php echo $stats_generales['excelente'] ?? 0; ?></td><td><?php echo ($stats_generales['total_calificaciones'] > 0) ? number_format(($stats_generales['excelente'] / $stats_generales['total_calificaciones']) * 100, 1) : 0; ?>%</td></tr>
+                                        <tr><td>75-89 (Bueno)</td><td><?php echo $stats_generales['bueno'] ?? 0; ?></td><td><?php echo ($stats_generales['total_calificaciones'] > 0) ? number_format(($stats_generales['bueno'] / $stats_generales['total_calificaciones']) * 100, 1) : 0; ?>%</td></tr>
+                                        <tr><td>60-74 (Regular)</td><td><?php echo $stats_generales['regular'] ?? 0; ?></td><td><?php echo ($stats_generales['total_calificaciones'] > 0) ? number_format(($stats_generales['regular'] / $stats_generales['total_calificaciones']) * 100, 1) : 0; ?>%</td></tr>
+                                        <tr><td>0-59 (Insuficiente)</td><td><?php echo $stats_generales['insuficiente'] ?? 0; ?></td><td><?php echo ($stats_generales['total_calificaciones'] > 0) ? number_format(($stats_generales['insuficiente'] / $stats_generales['total_calificaciones']) * 100, 1) : 0; ?>%</td></tr>
+                                    </tbody>
+                                </table></div></div></div>
                             </div>
                         </div>
                         <div class="row mb-4">
-                            <div class="col-md-6">
-                                <div class="card">
-                                    <div class="card-header">
-                                        <h6 class="mb-0">Promedio General por Nivel</h6>
-                                    </div>
-                                    <div class="card-body">
-                                        <div class="table-responsive">
-                                            <table class="table table-sm">
-                                                <thead>
-                                                    <tr>
-                                                        <th>Nivel</th>
-                                                        <th>Promedio</th>
-                                                        <th>Comparación Semestre Anterior</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    <tr>
-                                                        <td>Primaria</td>
-                                                        <td>78.4</td>
-                                                        <td><span class="text-success">+2.1%</span></td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td>Secundaria</td>
-                                                        <td>75.2</td>
-                                                        <td><span class="text-success">+1.5%</span></td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td><strong>Total</strong></td>
-                                                        <td><strong>76.8</strong></td>
-                                                        <td><span class="text-success">+1.8%</span></td>
-                                                    </tr>
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="card">
-                                    <div class="card-header">
-                                        <h6 class="mb-0">Distribución de Calificaciones</h6>
-                                    </div>
-                                    <div class="card-body">
-                                        <div class="table-responsive">
-                                            <table class="table table-sm">
-                                                <thead>
-                                                    <tr>
-                                                        <th>Rango</th>
-                                                        <th>Estudiantes</th>
-                                                        <th>Porcentaje</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    <tr>
-                                                        <td>90-100 (Excelente)</td>
-                                                        <td>87</td>
-                                                        <td>14.5%</td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td>80-89 (Muy Bueno)</td>
-                                                        <td>156</td>
-                                                        <td>26.0%</td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td>70-79 (Bueno)</td>
-                                                        <td>210</td>
-                                                        <td>35.0%</td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td>60-69 (Regular)</td>
-                                                        <td>105</td>
-                                                        <td>17.5%</td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td>0-59 (Insuficiente)</td>
-                                                        <td>42</td>
-                                                        <td>7.0%</td>
-                                                    </tr>
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="row mb-4">
-                            <div class="col-12">
-                                <div class="card">
-                                    <div class="card-header">
-                                        <h6 class="mb-0">Rendimiento por Asignatura</h6>
-                                    </div>
-                                    <div class="card-body">
-                                        <div class="table-responsive">
-                                            <table class="table">
-                                                <thead>
-                                                    <tr>
-                                                        <th>Asignatura</th>
-                                                        <th>Promedio</th>
-                                                        <th>Aprobados</th>
-                                                        <th>Reprobados</th>
-                                                        <th>Tasa de Aprobación</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    <tr>
-                                                        <td>Matemáticas</td>
-                                                        <td>72.5</td>
-                                                        <td>540</td>
-                                                        <td>60</td>
-                                                        <td>90.0%</td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td>Lenguaje</td>
-                                                        <td>78.3</td>
-                                                        <td>570</td>
-                                                        <td>30</td>
-                                                        <td>95.0%</td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td>Ciencias Naturales</td>
-                                                        <td>75.8</td>
-                                                        <td>552</td>
-                                                        <td>48</td>
-                                                        <td>92.0%</td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td>Ciencias Sociales</td>
-                                                        <td>79.2</td>
-                                                        <td>564</td>
-                                                        <td>36</td>
-                                                        <td>94.0%</td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td>Inglés</td>
-                                                        <td>76.4</td>
-                                                        <td>546</td>
-                                                        <td>54</td>
-                                                        <td>91.0%</td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td>Educación Física</td>
-                                                        <td>85.7</td>
-                                                        <td>588</td>
-                                                        <td>12</td>
-                                                        <td>98.0%</td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td>Artes</td>
-                                                        <td>83.2</td>
-                                                        <td>582</td>
-                                                        <td>18</td>
-                                                        <td>97.0%</td>
-                                                    </tr>
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                            <div class="col-12"><div class="card"><div class="card-header"><h6 class="mb-0">Rendimiento por Asignatura</h6></div>
+                            <div class="card-body"><div class="table-responsive"><table class="table">
+                                <thead><tr><th>Asignatura</th><th>Promedio</th><th>Aprobados</th><th>Reprobados</th><th>Tasa de Aprobación</th></tr></thead>
+                                <tbody>
+                                    <?php if(empty($rendimiento_asignaturas)): ?>
+                                        <tr><td colspan="5" class="text-center">No hay datos para los filtros seleccionados.</td></tr>
+                                    <?php else: ?>
+                                        <?php foreach($rendimiento_asignaturas as $asignatura): ?>
+                                        <tr>
+                                            <td><?php echo htmlspecialchars($asignatura['nombre']); ?></td>
+                                            <td><?php echo number_format($asignatura['promedio'], 1); ?></td>
+                                            <td><?php echo $asignatura['aprobados']; ?></td>
+                                            <td><?php echo $asignatura['reprobados']; ?></td>
+                                            <td>
+                                                <div class="progress" style="height: 20px;">
+                                                    <?php $tasa_aprobacion = ($asignatura['total'] > 0) ? ($asignatura['aprobados'] / $asignatura['total']) * 100 : 0; ?>
+                                                    <div class="progress-bar <?php if($tasa_aprobacion < 70) echo 'bg-warning'; else echo 'bg-success'; ?>" role="progressbar" style="width: <?php echo $tasa_aprobacion; ?>%;" aria-valuenow="<?php echo $tasa_aprobacion; ?>"><?php echo number_format($tasa_aprobacion, 1); ?>%</div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        <?php endforeach; ?>
+                                    <?php endif; ?>
+                                </tbody>
+                            </table></div></div></div></div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-
-    <!-- Scripts -->
     <script src="../js/jquery-3.3.1.min.js"></script>
     <script src="../js/bootstrap.bundle.min.js"></script>
 </body>
-</html>
+</html> 
