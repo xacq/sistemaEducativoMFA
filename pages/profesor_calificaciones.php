@@ -21,6 +21,26 @@ $stmt->execute();
 $stmt->bind_result($nombre, $apellido);
 $stmt->fetch();
 $stmt->close();
+
+// --- INICIO: Cargar los cursos asignados a este profesor ---
+$cursos_profesor = [];
+$profesor_id = $_SESSION['user_id']; // El ID del profesor logueado
+
+$stmt_cursos = $mysqli->prepare("
+    SELECT id, nombre, grado, seccion 
+    FROM cursos 
+    WHERE profesor_id = ? AND estatus = 'Activo'
+    ORDER BY nombre, grado
+");
+$stmt_cursos->bind_param('i', $profesor_id);
+$stmt_cursos->execute();
+$result_cursos = $stmt_cursos->get_result();
+while ($row = $result_cursos->fetch_assoc()) {
+    $cursos_profesor[] = $row;
+}
+$stmt_cursos->close();
+// --- FIN: Cargar cursos ---
+
 include __DIR__ . '/side_bar_profesor.php';
 ?>
 <!DOCTYPE html>
@@ -405,117 +425,121 @@ include __DIR__ . '/side_bar_profesor.php';
     </div>
 
     <!-- New Grade Modal - Only Professor can access -->
-    <div class="modal fade" id="newGradeModal" tabindex="-1" aria-labelledby="newGradeModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header card-header-academic text-white">
-                    <h5 class="modal-title" id="newGradeModalLabel">Nueva Calificación</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
+<!-- New Grade Modal -->
+<div class="modal fade" id="newGradeModal" tabindex="-1" aria-labelledby="newGradeModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header card-header-academic text-white">
+                <h5 class="modal-title" id="newGradeModalLabel">Crear Nueva Calificación</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <!-- INICIO DEL FORMULARIO MODIFICADO -->
+            <form action="guardar_evaluacion.php" method="POST">
                 <div class="modal-body">
-                    <form>
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                <label for="gradeClass" class="form-label">Curso</label>
-                                <select class="form-select" id="gradeClass" required>
-                                    <option selected disabled value="">Seleccionar curso...</option>
-                                    <option>Matemáticas - 6° Secundaria</option>
-                                    <option>Física - 6° Secundaria</option>
-                                    <option>Matemáticas - 5° Secundaria</option>
-                                    <option>Física - 5° Secundaria</option>
-                                    <option>Química - 5° Secundaria</option>
-                                </select>
-                            </div>
-                            <div class="col-md-6">
-                                <label for="gradePeriod" class="form-label">Periodo</label>
-                                <select class="form-select" id="gradePeriod" required>
-                                    <option selected disabled value="">Seleccionar periodo...</option>
-                                    <option>Primer Trimestre</option>
-                                    <option>Segundo Trimestre</option>
-                                    <option>Tercer Trimestre</option>
-                                    <option>Final</option>
-                                </select>
-                            </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="gradeClass" class="form-label">Curso</label>
+                            <select class="form-select" id="gradeClass" name="curso_id" required>
+                                <option selected disabled value="">Seleccionar curso...</option>
+                                <?php foreach ($cursos_profesor as $curso): ?>
+                                    <option value="<?php echo $curso['id']; ?>">
+                                        <?php echo htmlspecialchars($curso['nombre'] . ' - ' . $curso['grado'] . $curso['seccion']); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
                         </div>
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                <label for="gradeType" class="form-label">Tipo de Evaluación</label>
-                                <select class="form-select" id="gradeType" required>
-                                    <option selected disabled value="">Seleccionar tipo...</option>
-                                    <option>Examen</option>
-                                    <option>Prueba Corta</option>
-                                    <option>Tarea</option>
-                                    <option>Proyecto</option>
-                                    <option>Participación</option>
-                                </select>
-                            </div>
-                            <div class="col-md-6">
-                                <label for="gradeDate" class="form-label">Fecha de Evaluación</label>
-                                <input type="date" class="form-control" id="gradeDate" required>
-                            </div>
+                        <div class="col-md-6">
+                            <label for="gradePeriod" class="form-label">Periodo</label>
+                            <select class="form-select" id="gradePeriod" name="periodo" required>
+                                <option selected disabled value="">Seleccionar periodo...</option>
+                                <option value="Primer Trimestre">Primer Trimestre</option>
+                                <option value="Segundo Trimestre">Segundo Trimestre</option>
+                                <option value="Tercer Trimestre">Tercer Trimestre</option>
+                                <option value="Final">Final</option>
+                            </select>
                         </div>
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                <label for="gradeTitle" class="form-label">Título de la Evaluación</label>
-                                <input type="text" class="form-control" id="gradeTitle" placeholder="Ej: Examen Parcial 1" required>
-                            </div>
-                            <div class="col-md-6">
-                                <label for="gradeWeight" class="form-label">Ponderación (%)</label>
-                                <input type="number" class="form-control" id="gradeWeight" min="1" max="100" value="25" required>
-                            </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="gradeType" class="form-label">Tipo de Evaluación</label>
+                            <select class="form-select" id="gradeType" name="tipo_evaluacion" required>
+                                <option selected disabled value="">Seleccionar tipo...</option>
+                                <option value="Examen">Examen</option>
+                                <option value="Prueba Corta">Prueba Corta</option>
+                                <option value="Tarea">Tarea</option>
+                                <option value="Proyecto">Proyecto</option>
+                                <option value="Participación">Participación</option>
+                            </select>
                         </div>
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                <label for="gradeMaxScore" class="form-label">Puntaje Máximo</label>
-                                <input type="number" class="form-control" id="gradeMaxScore" min="1" value="100" required>
-                            </div>
-                            <div class="col-md-6">
-                                <label for="gradePassScore" class="form-label">Puntaje Mínimo Aprobatorio</label>
-                                <input type="number" class="form-control" id="gradePassScore" min="1" value="60" required>
-                            </div>
+                        <div class="col-md-6">
+                            <label for="gradeDate" class="form-label">Fecha de Evaluación</label>
+                            <input type="date" class="form-control" id="gradeDate" name="fecha" required>
                         </div>
-                        <div class="mb-3">
-                            <label for="gradeDescription" class="form-label">Descripción</label>
-                            <textarea class="form-control" id="gradeDescription" rows="3"></textarea>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="gradeTitle" class="form-label">Título de la Evaluación</label>
+                            <input type="text" class="form-control" id="gradeTitle" name="titulo" placeholder="Ej: Examen Parcial 1" required>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label">Método de Ingreso de Calificaciones</label>
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="gradeInputMethod" id="individualInput" value="individual" checked>
-                                <label class="form-check-label" for="individualInput">
-                                    Ingresar calificaciones individualmente
-                                </label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="gradeInputMethod" id="batchInput" value="batch">
-                                <label class="form-check-label" for="batchInput">
-                                    Importar calificaciones desde archivo
-                                </label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="gradeInputMethod" id="templateInput" value="template">
-                                <label class="form-check-label" for="templateInput">
-                                    Descargar plantilla para llenar
-                                </label>
-                            </div>
+                        <div class="col-md-6">
+                            <label for="gradeWeight" class="form-label">Ponderación (%)</label>
+                            <input type="number" class="form-control" id="gradeWeight" name="ponderacion" min="0" max="100" value="25" required>
                         </div>
-                        <div class="mb-3">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="notifyStudents" checked>
-                                <label class="form-check-label" for="notifyStudents">
-                                    Notificar a los estudiantes cuando se publiquen las calificaciones
-                                </label>
-                            </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="gradeMaxScore" class="form-label">Puntaje Máximo</label>
+                            <input type="number" class="form-control" id="gradeMaxScore" name="puntaje_maximo" min="1" value="100" required>
                         </div>
-                    </form>
+                        <div class="col-md-6">
+                            <label for="gradePassScore" class="form-label">Puntaje Mínimo Aprobatorio</label>
+                            <input type="number" class="form-control" id="gradePassScore" name="puntaje_aprobatorio" min="1" value="60" required>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="gradeDescription" class="form-label">Descripción</label>
+                        <textarea class="form-control" id="gradeDescription" name="descripcion" rows="3"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Método de Ingreso de Calificaciones</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="metodo_ingreso" id="individualInput" value="individual" checked>
+                            <label class="form-check-label" for="individualInput">
+                                Ingresar calificaciones individualmente
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="metodo_ingreso" id="batchInput" value="batch">
+                            <label class="form-check-label" for="batchInput">
+                                Importar calificaciones desde archivo
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="metodo_ingreso" id="templateInput" value="template">
+                            <label class="form-check-label" for="templateInput">
+                                Descargar plantilla para llenar
+                            </label>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="notifyStudents" name="notificar_estudiantes" value="1" checked>
+                            <label class="form-check-label" for="notifyStudents">
+                                Notificar a los estudiantes cuando se publiquen las calificaciones
+                            </label>
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="button" class="btn btn-academic">Continuar</button>
+                    <!-- Cambiado a type="submit". El texto "Continuar" implica que después de esto, se pasaría a ingresar las notas. -->
+                    <button type="submit" class="btn btn-academic">Guardar y Continuar</button>
                 </div>
-            </div>
+            </form>
+            <!-- FIN DEL FORMULARIO MODIFICADO -->
         </div>
     </div>
+</div>
 
     <!-- Scripts -->
     <script src="../js/jquery-3.3.1.min.js"></script>

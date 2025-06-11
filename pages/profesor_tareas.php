@@ -83,6 +83,24 @@ include __DIR__ . '/side_bar_profesor.php';
                     </div>
                 </div>
 
+                <!-- INICIO: Bloque para mostrar mensajes de sesión -->
+                <?php if (isset($_SESSION['success_message'])): ?>
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        <?php echo $_SESSION['success_message']; ?>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                    <?php unset($_SESSION['success_message']); ?>
+                <?php endif; ?>
+
+                <?php if (isset($_SESSION['error_message'])): ?>
+                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                        <?php echo $_SESSION['error_message']; ?>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                    <?php unset($_SESSION['error_message']); ?>
+                <?php endif; ?>
+                <!-- FIN: Bloque para mostrar mensajes -->
+
                 <!-- Filter and Search -->
                 <div class="row mb-4">
                     <div class="col-md-3">

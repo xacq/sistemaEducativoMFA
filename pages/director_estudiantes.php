@@ -10,19 +10,119 @@ if (empty($_SESSION['user_id'])) {
 // Conexión
 require_once '../config.php';
 
-// Obtener nombre y apellido
-$stmt = $mysqli->prepare("
-    SELECT nombre, apellido
-      FROM usuarios
-     WHERE id = ?
-");
-$stmt->bind_param('i', $_SESSION['user_id']);
-$stmt->execute();
-$stmt->bind_result($nombre, $apellido);
-$stmt->fetch();
-$stmt->close();
-include __DIR__ . '/side_bar_director.php';
+// --- INICIO: LÓGICA DE DATOS, FILTROS Y PAGINACIÓN ---
 
+// 1. OBTENER NOMBRE DEL DIRECTOR
+$stmt_director = $mysqli->prepare("SELECT nombre, apellido FROM usuarios WHERE id = ?");
+$stmt_director->bind_param('i', $_SESSION['user_id']);
+$stmt_director->execute();
+$stmt_director->bind_result($nombre_director, $apellido_director);
+$stmt_director->fetch();
+$stmt_director->close();
+
+// 2. PROCESAR FILTROS Y BÚSQUEDA
+$filtro_grado_id = isset($_GET['grado']) ? (int)$_GET['grado'] : 0;
+$filtro_busqueda = isset($_GET['search']) ? trim($_GET['search']) : '';
+$where_clauses = [];
+$params = [];
+$param_types = '';
+
+if ($filtro_grado_id > 0) {
+    $where_clauses[] = "e.grado_id = ?";
+    $params[] = $filtro_grado_id;
+    $param_types .= 'i';
+}
+if (!empty($filtro_busqueda)) {
+    $where_clauses[] = "(u.nombre LIKE ? OR u.apellido LIKE ? OR e.codigo_estudiante LIKE ?)";
+    $search_term = "%{$filtro_busqueda}%";
+    $params[] = $search_term;
+    $params[] = $search_term;
+    $params[] = $search_term;
+    $param_types .= 'sss';
+}
+
+$where_sql = '';
+if (!empty($where_clauses)) {
+    $where_sql = " WHERE " . implode(" AND ", $where_clauses);
+}
+
+// 3. CONFIGURACIÓN DE PAGINACIÓN
+$registros_por_pagina = 10;
+$pagina_actual = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+$offset = ($pagina_actual - 1) * $registros_por_pagina;
+
+// 4. CONTAR TOTAL DE ESTUDIANTES (CON FILTROS APLICADOS)
+$sql_total = "SELECT COUNT(e.id) FROM estudiantes AS e JOIN usuarios AS u ON e.usuario_id = u.id" . $where_sql;
+$stmt_total = $mysqli->prepare($sql_total);
+if (!empty($params)) {
+    $stmt_total->bind_param($param_types, ...$params);
+}
+$stmt_total->execute();
+$total_estudiantes = $stmt_total->get_result()->fetch_row()[0];
+$total_paginas = ceil($total_estudiantes / $registros_por_pagina);
+$stmt_total->close();
+
+// 5. CONSULTA PRINCIPAL PARA OBTENER LOS ESTUDIANTES DE LA PÁGINA ACTUAL
+$estudiantes = [];
+$sql_estudiantes = "
+    SELECT 
+        e.id, e.codigo_estudiante, e.fecha_nacimiento, e.estado AS estado_estudiante,
+        u.nombre, u.apellido,
+        g.nombre AS nombre_grado
+    FROM estudiantes AS e
+    JOIN usuarios AS u ON e.usuario_id = u.id
+    JOIN grados AS g ON e.grado_id = g.id
+    $where_sql
+    ORDER BY u.apellido, u.nombre
+    LIMIT ? OFFSET ?
+";
+$stmt_estudiantes = $mysqli->prepare($sql_estudiantes);
+$params_paginacion = $params;
+$params_paginacion[] = $registros_por_pagina;
+$params_paginacion[] = $offset;
+$param_types_paginacion = $param_types . 'ii';
+if (!empty($params)) {
+    $stmt_estudiantes->bind_param($param_types_paginacion, ...$params_paginacion);
+} else {
+     $stmt_estudiantes->bind_param('ii', $registros_por_pagina, $offset);
+}
+$stmt_estudiantes->execute();
+$result_estudiantes = $stmt_estudiantes->get_result();
+while ($row = $result_estudiantes->fetch_assoc()) {
+    $estudiantes[] = $row;
+}
+$stmt_estudiantes->close();
+
+// 6. OBTENER LISTA DE GRADOS PARA FILTROS Y MODAL
+$grados_lista = [];
+$result_grados = $mysqli->query("SELECT id, nombre FROM grados ORDER BY id");
+while ($row = $result_grados->fetch_assoc()) {
+    $grados_lista[] = $row;
+}
+$result_grados->free();
+
+// 7. OBTENER ESTADÍSTICAS
+// Distribución por grado
+$distribucion_grados = [];
+$result_dist_grados = $mysqli->query("
+    SELECT g.nombre, COUNT(e.id) as total 
+    FROM estudiantes e 
+    JOIN grados g ON e.grado_id = g.id 
+    GROUP BY g.id ORDER BY g.id
+");
+$total_general_estudiantes = $mysqli->query("SELECT COUNT(id) FROM estudiantes")->fetch_row()[0];
+while ($row = $result_dist_grados->fetch_assoc()) {
+    $distribucion_grados[] = [
+        'nombre' => $row['nombre'],
+        'total' => $row['total'],
+        'porcentaje' => ($total_general_estudiantes > 0) ? round(($row['total'] / $total_general_estudiantes) * 100, 1) : 0
+    ];
+}
+$result_dist_grados->free();
+
+// --- FIN: LÓGICA DE DATOS ---
+
+include __DIR__ . '/side_bar_director.php';
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -44,112 +144,60 @@ include __DIR__ . '/side_bar_director.php';
                 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
                     <h1 class="h2">Gestión de Estudiantes</h1>
                     <div class="btn-toolbar mb-2 mb-md-0">
-                        <div class="position-relative me-3">
-                            <i class="bi bi-bell fs-4"></i>
-                            <span class="notification-badge">7</span>
-                        </div>
+                        <!-- INICIO: DROPDOWN DE USUARIO RESTAURADO -->
                         <div class="dropdown">
                             <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="dropdownMenuButton" data-bs-toggle="dropdown" aria-expanded="false">
                                 <i class="bi bi-person-circle me-1"></i>
-                                <?php echo htmlspecialchars($nombre . ' ' . $apellido, ENT_QUOTES, 'UTF-8'); ?>
+                                <?php echo htmlspecialchars($nombre_director . ' ' . $apellido_director, ENT_QUOTES, 'UTF-8'); ?>
                             </button>
-                            <ul class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+                            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="dropdownMenuButton">
                                 <li><a class="dropdown-item" href="director_perfil.php">Mi Perfil</a></li>
                                 <li><a class="dropdown-item" href="director_configuracion.php">Configuración</a></li>
                                 <li><hr class="dropdown-divider"></li>
                                 <li><a class="dropdown-item" href="../index.php">Cerrar Sesión</a></li>
                             </ul>
                         </div>
+                        <!-- FIN: DROPDOWN DE USUARIO RESTAURADO -->
                     </div>
                 </div>
-                    <!-- INICIO: Bloque para mostrar mensajes de sesión -->
-                    <?php if (isset($_SESSION['success_message'])): ?>
-                        <div class="alert alert-success alert-dismissible fade show" role="alert">
-                            <?php echo $_SESSION['success_message']; ?>
-                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                        </div>
-                        <?php unset($_SESSION['success_message']); // Limpiar el mensaje para no mostrarlo de nuevo ?>
-                    <?php endif; ?>
-
-                    <?php if (isset($_SESSION['error_message'])): ?>
-                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                            <?php echo $_SESSION['error_message']; ?>
-                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                    </div>
-                    <?php unset($_SESSION['error_message']); // Limpiar el mensaje ?>
+                <!-- Mensajes de sesión -->
+                <?php if (isset($_SESSION['success_message'])): ?>
+                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                    <?php echo $_SESSION['success_message']; unset($_SESSION['success_message']); ?>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
                 <?php endif; ?>
-                <!-- FIN: Bloque para mostrar mensajes -->
-
-                <!-- Search and Add Student -->
-                <div class="row mb-4">
-                    <div class="col-md-8">
-                        <div class="input-group">
-                            <input type="text" class="form-control" placeholder="Buscar estudiante por nombre, grado o ID...">
-                            <button class="btn btn-academic" type="button">
-                                <i class="bi bi-search"></i> Buscar
-                            </button>
-                        </div>
-                    </div>
-                    <div class="col-md-4 text-end">
-                        <button type="button" class="btn btn-academic" data-bs-toggle="modal" data-bs-target="#addStudentModal">
-                            <i class="bi bi-person-plus"></i> Agregar Estudiante
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Filters -->
-                <div class="row mb-4">
-                    <div class="col-md-12">
-                        <div class="card">
-                            <div class="card-header card-header-academic">
-                                <h5 class="mb-0 text-white">Filtros</h5>
-                            </div>
-                            <div class="card-body">
-                                <div class="row">
-                                    <div class="col-md-3 mb-2">
-                                        <label for="gradeFilter" class="form-label">Grado</label>
-                                        <select class="form-select" id="gradeFilter">
-                                            <option value="all" selected>Todos</option>
-                                            <option value="primary">Primaria</option>
-                                            <option value="secondary">Secundaria</option>
-                                            <option value="grade1">1° Grado</option>
-                                            <option value="grade2">2° Grado</option>
-                                            <option value="grade3">3° Grado</option>
-                                            <option value="grade4">4° Grado</option>
-                                            <option value="grade5">5° Grado</option>
-                                            <option value="grade6">6° Grado</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-3 mb-2">
-                                        <label for="statusFilter" class="form-label">Estado</label>
-                                        <select class="form-select" id="statusFilter">
-                                            <option value="all" selected>Todos</option>
-                                            <option value="active">Activo</option>
-                                            <option value="inactive">Inactivo</option>
-                                            <option value="suspended">Suspendido</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-3 mb-2">
-                                        <label for="performanceFilter" class="form-label">Rendimiento</label>
-                                        <select class="form-select" id="performanceFilter">
-                                            <option value="all" selected>Todos</option>
-                                            <option value="excellent">Excelente (90-100)</option>
-                                            <option value="good">Bueno (70-89)</option>
-                                            <option value="average">Regular (60-69)</option>
-                                            <option value="poor">Insuficiente (0-59)</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-3 mb-2">
-                                        <label for="sortBy" class="form-label">Ordenar por</label>
-                                        <select class="form-select" id="sortBy">
-                                            <option value="name" selected>Nombre</option>
-                                            <option value="grade">Grado</option>
-                                            <option value="performance">Rendimiento</option>
-                                            <option value="attendance">Asistencia</option>
-                                        </select>
-                                    </div>
+                
+                <!-- Search, Filters and Add Student Button -->
+                <div class="card mb-4">
+                    <div class="card-header card-header-academic"><h5 class="mb-0 text-white">Filtros y Acciones</h5></div>
+                    <div class="card-body">
+                        <form method="GET" action="">
+                            <div class="row align-items-end">
+                                <div class="col-md-5 mb-3">
+                                    <label for="search" class="form-label">Buscar Estudiante</label>
+                                    <input type="text" class="form-control" name="search" id="search" value="<?php echo htmlspecialchars($filtro_busqueda); ?>" placeholder="Nombre, apellido o código...">
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <label for="grado" class="form-label">Filtrar por Grado</label>
+                                    <select class="form-select" name="grado" id="grado">
+                                        <option value="0" <?php if ($filtro_grado_id == 0) echo 'selected'; ?>>Todos los grados</option>
+                                        <?php foreach ($grados_lista as $grado): ?>
+                                        <option value="<?php echo $grado['id']; ?>" <?php if ($filtro_grado_id == $grado['id']) echo 'selected'; ?>>
+                                            <?php echo htmlspecialchars($grado['nombre']); ?>
+                                        </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="col-md-3 mb-3">
+                                    <button type="submit" class="btn btn-academic w-100"><i class="bi bi-filter"></i> Filtrar</button>
                                 </div>
                             </div>
+                        </form>
+                        <div class="text-end mt-2">
+                             <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addStudentModal">
+                                <i class="bi bi-person-plus"></i> Agregar Nuevo Estudiante
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -157,263 +205,104 @@ include __DIR__ . '/side_bar_director.php';
                 <!-- Students List -->
                 <div class="card mb-4">
                     <div class="card-header card-header-academic">
-                        <h5 class="mb-0 text-white">Estudiantes (600)</h5>
+                        <h5 class="mb-0 text-white">Mostrando <?php echo count($estudiantes); ?> de <?php echo $total_estudiantes; ?> Estudiantes</h5>
                     </div>
                     <div class="card-body">
                         <div class="table-responsive">
                             <table class="table table-hover">
+                                <!-- ... (código de la tabla dinámica, no necesita cambios) ... -->
                                 <thead class="table-academic">
                                     <tr>
-                                        <th>ID</th>
-                                        <th>Nombre</th>
+                                        <th>Código</th>
+                                        <th>Nombre Completo</th>
                                         <th>Grado</th>
                                         <th>Edad</th>
-                                        <th>Promedio</th>
-                                        <th>Asistencia</th>
                                         <th>Estado</th>
                                         <th>Acciones</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr>
-                                        <td>E001</td>
-                                        <td>Juan Pérez</td>
-                                        <td>6° Secundaria</td>
-                                        <td>17</td>
-                                        <td>85.7</td>
-                                        <td>92%</td>
-                                        <td><span class="badge bg-success">Activo</span></td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></button>
-                                            <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></button>
-                                            <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>E002</td>
-                                        <td>Ana García</td>
-                                        <td>5° Secundaria</td>
-                                        <td>16</td>
-                                        <td>92.3</td>
-                                        <td>95%</td>
-                                        <td><span class="badge bg-success">Activo</span></td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></button>
-                                            <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></button>
-                                            <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>E003</td>
-                                        <td>Carlos Rodríguez</td>
-                                        <td>4° Secundaria</td>
-                                        <td>15</td>
-                                        <td>78.5</td>
-                                        <td>88%</td>
-                                        <td><span class="badge bg-success">Activo</span></td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></button>
-                                            <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></button>
-                                            <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>E004</td>
-                                        <td>María López</td>
-                                        <td>6° Secundaria</td>
-                                        <td>17</td>
-                                        <td>89.2</td>
-                                        <td>94%</td>
-                                        <td><span class="badge bg-success">Activo</span></td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></button>
-                                            <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></button>
-                                            <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>E005</td>
-                                        <td>Pedro Martínez</td>
-                                        <td>3° Secundaria</td>
-                                        <td>14</td>
-                                        <td>65.8</td>
-                                        <td>78%</td>
-                                        <td><span class="badge bg-warning">Suspendido</span></td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></button>
-                                            <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></button>
-                                            <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>E006</td>
-                                        <td>Laura Gómez</td>
-                                        <td>5° Secundaria</td>
-                                        <td>16</td>
-                                        <td>91.5</td>
-                                        <td>97%</td>
-                                        <td><span class="badge bg-success">Activo</span></td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></button>
-                                            <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></button>
-                                            <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>E007</td>
-                                        <td>Roberto Sánchez</td>
-                                        <td>4° Secundaria</td>
-                                        <td>15</td>
-                                        <td>82.7</td>
-                                        <td>90%</td>
-                                        <td><span class="badge bg-success">Activo</span></td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></button>
-                                            <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></button>
-                                            <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>E008</td>
-                                        <td>Patricia Torres</td>
-                                        <td>6° Primaria</td>
-                                        <td>12</td>
-                                        <td>88.3</td>
-                                        <td>93%</td>
-                                        <td><span class="badge bg-success">Activo</span></td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></button>
-                                            <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></button>
-                                            <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>E009</td>
-                                        <td>Miguel Ángel Flores</td>
-                                        <td>5° Primaria</td>
-                                        <td>11</td>
-                                        <td>79.5</td>
-                                        <td>85%</td>
-                                        <td><span class="badge bg-success">Activo</span></td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></button>
-                                            <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></button>
-                                            <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>E010</td>
-                                        <td>Sofía Ramírez</td>
-                                        <td>4° Primaria</td>
-                                        <td>10</td>
-                                        <td>94.2</td>
-                                        <td>98%</td>
-                                        <td><span class="badge bg-success">Activo</span></td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></button>
-                                            <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></button>
-                                            <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
-                                        </td>
-                                    </tr>
+                                    <?php if (empty($estudiantes)): ?>
+                                        <tr>
+                                            <td colspan="6" class="text-center">No se encontraron estudiantes con los filtros aplicados.</td>
+                                        </tr>
+                                    <?php else: ?>
+                                        <?php foreach ($estudiantes as $estudiante): ?>
+                                        <tr>
+                                            <td><?php echo htmlspecialchars($estudiante['codigo_estudiante']); ?></td>
+                                            <td><?php echo htmlspecialchars($estudiante['apellido'] . ' ' . $estudiante['nombre']); ?></td>
+                                            <td><?php echo htmlspecialchars($estudiante['nombre_grado']); ?></td>
+                                            <td>
+                                                <?php
+                                                $fecha_nac = new DateTime($estudiante['fecha_nacimiento']);
+                                                $hoy = new DateTime();
+                                                echo $hoy->diff($fecha_nac)->y;
+                                                ?>
+                                            </td>
+                                            <td>
+                                                <?php
+                                                $estado = $estudiante['estado_estudiante'];
+                                                $badge_class = ($estado == 'Activo') ? 'bg-success' : (($estado == 'Inactivo') ? 'bg-warning' : 'bg-danger');
+                                                echo "<span class='badge {$badge_class}'>{$estado}</span>";
+                                                ?>
+                                            </td>
+                                            <td>
+                                                <button class="btn btn-sm btn-outline-primary" title="Ver Perfil"><i class="bi bi-eye"></i></button>
+                                                <button class="btn btn-sm btn-outline-secondary" title="Editar"><i class="bi bi-pencil"></i></button>
+                                                <button class="btn btn-sm btn-outline-danger" title="Eliminar"><i class="bi bi-trash"></i></button>
+                                            </td>
+                                        </tr>
+                                        <?php endforeach; ?>
+                                    <?php endif; ?>
                                 </tbody>
                             </table>
                         </div>
+                        
+                        <!-- Paginación Dinámica (con filtros preservados) -->
                         <nav aria-label="Page navigation">
+                            <!-- ... (código de paginación, no necesita cambios) ... -->
                             <ul class="pagination justify-content-center">
-                                <li class="page-item disabled">
-                                    <a class="page-link" href="#" tabindex="-1" aria-disabled="true">Anterior</a>
+                                <?php
+                                $query_params = [];
+                                if ($filtro_grado_id > 0) $query_params['grado'] = $filtro_grado_id;
+                                if (!empty($filtro_busqueda)) $query_params['search'] = $filtro_busqueda;
+                                ?>
+                                <li class="page-item <?php if ($pagina_actual <= 1) echo 'disabled'; ?>">
+                                    <a class="page-link" href="?page=<?php echo $pagina_actual - 1; ?>&<?php echo http_build_query($query_params); ?>">Anterior</a>
                                 </li>
-                                <li class="page-item active"><a class="page-link" href="#">1</a></li>
-                                <li class="page-item"><a class="page-link" href="#">2</a></li>
-                                <li class="page-item"><a class="page-link" href="#">3</a></li>
-                                <li class="page-item"><a class="page-link" href="#">4</a></li>
-                                <li class="page-item"><a class="page-link" href="#">5</a></li>
-                                <li class="page-item">
-                                    <a class="page-link" href="#">Siguiente</a>
+                                <?php for ($i = 1; $i <= $total_paginas; $i++): ?>
+                                <li class="page-item <?php if ($pagina_actual == $i) echo 'active'; ?>">
+                                    <a class="page-link" href="?page=<?php echo $i; ?>&<?php echo http_build_query($query_params); ?>"><?php echo $i; ?></a>
+                                </li>
+                                <?php endfor; ?>
+                                <li class="page-item <?php if ($pagina_actual >= $total_paginas) echo 'disabled'; ?>">
+                                    <a class="page-link" href="?page=<?php echo $pagina_actual + 1; ?>&<?php echo http_build_query($query_params); ?>">Siguiente</a>
                                 </li>
                             </ul>
                         </nav>
                     </div>
                 </div>
 
-                <!-- Student Statistics -->
+                <!-- Student Statistics (DINÁMICAS) -->
                 <div class="row mb-4">
+                    <!-- ... (código de estadísticas, no necesita cambios) ... -->
                     <div class="col-md-6">
                         <div class="card">
-                            <div class="card-header card-header-academic">
-                                <h5 class="mb-0 text-white">Distribución por Grado</h5>
-                            </div>
+                            <div class="card-header card-header-academic"><h5 class="mb-0 text-white">Distribución por Grado</h5></div>
                             <div class="card-body">
                                 <div class="table-responsive">
-                                    <table class="table table-sm">
+                                    <table class="table table-sm table-striped">
                                         <thead>
-                                            <tr>
-                                                <th>Grado</th>
-                                                <th>Estudiantes</th>
-                                                <th>Porcentaje</th>
-                                            </tr>
+                                            <tr><th>Grado</th><th>Estudiantes</th><th>Porcentaje</th></tr>
                                         </thead>
                                         <tbody>
+                                            <?php foreach ($distribucion_grados as $dist): ?>
                                             <tr>
-                                                <td>1° Primaria</td>
-                                                <td>50</td>
-                                                <td>8.3%</td>
+                                                <td><?php echo htmlspecialchars($dist['nombre']); ?></td>
+                                                <td><?php echo $dist['total']; ?></td>
+                                                <td><?php echo $dist['porcentaje']; ?>%</td>
                                             </tr>
-                                            <tr>
-                                                <td>2° Primaria</td>
-                                                <td>48</td>
-                                                <td>8.0%</td>
-                                            </tr>
-                                            <tr>
-                                                <td>3° Primaria</td>
-                                                <td>52</td>
-                                                <td>8.7%</td>
-                                            </tr>
-                                            <tr>
-                                                <td>4° Primaria</td>
-                                                <td>55</td>
-                                                <td>9.2%</td>
-                                            </tr>
-                                            <tr>
-                                                <td>5° Primaria</td>
-                                                <td>50</td>
-                                                <td>8.3%</td>
-                                            </tr>
-                                            <tr>
-                                                <td>6° Primaria</td>
-                                                <td>45</td>
-                                                <td>7.5%</td>
-                                            </tr>
-                                            <tr>
-                                                <td>1° Secundaria</td>
-                                                <td>60</td>
-                                                <td>10.0%</td>
-                                            </tr>
-                                            <tr>
-                                                <td>2° Secundaria</td>
-                                                <td>58</td>
-                                                <td>9.7%</td>
-                                            </tr>
-                                            <tr>
-                                                <td>3° Secundaria</td>
-                                                <td>62</td>
-                                                <td>10.3%</td>
-                                            </tr>
-                                            <tr>
-                                                <td>4° Secundaria</td>
-                                                <td>55</td>
-                                                <td>9.2%</td>
-                                            </tr>
-                                            <tr>
-                                                <td>5° Secundaria</td>
-                                                <td>40</td>
-                                                <td>6.7%</td>
-                                            </tr>
-                                            <tr>
-                                                <td>6° Secundaria</td>
-                                                <td>25</td>
-                                                <td>4.2%</td>
-                                            </tr>
+                                            <?php endforeach; ?>
                                         </tbody>
                                     </table>
                                 </div>
@@ -422,48 +311,11 @@ include __DIR__ . '/side_bar_director.php';
                     </div>
                     <div class="col-md-6">
                         <div class="card">
-                            <div class="card-header card-header-academic">
-                                <h5 class="mb-0 text-white">Estadísticas de Rendimiento</h5>
-                            </div>
+                            <div class="card-header card-header-academic"><h5 class="mb-0 text-white">Estadísticas Generales</h5></div>
                             <div class="card-body">
-                                <div class="table-responsive">
-                                    <table class="table table-sm">
-                                        <thead>
-                                            <tr>
-                                                <th>Nivel de Rendimiento</th>
-                                                <th>Estudiantes</th>
-                                                <th>Porcentaje</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <tr>
-                                                <td>Excelente (90-100)</td>
-                                                <td>87</td>
-                                                <td>14.5%</td>
-                                            </tr>
-                                            <tr>
-                                                <td>Muy Bueno (80-89)</td>
-                                                <td>156</td>
-                                                <td>26.0%</td>
-                                            </tr>
-                                            <tr>
-                                                <td>Bueno (70-79)</td>
-                                                <td>210</td>
-                                                <td>35.0%</td>
-                                            </tr>
-                                            <tr>
-                                                <td>Regular (60-69)</td>
-                                                <td>105</td>
-                                                <td>17.5%</td>
-                                            </tr>
-                                            <tr>
-                                                <td>Insuficiente (0-59)</td>
-                                                <td>42</td>
-                                                <td>7.0%</td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                                </div>
+                                <p>Total de Estudiantes: <strong><?php echo $total_general_estudiantes; ?></strong></p>
+                                <p>Estudiantes Activos: <strong><?php echo $mysqli->query("SELECT COUNT(id) FROM estudiantes WHERE estado = 'Activo'")->fetch_row()[0]; ?></strong></p>
+                                <p>Estudiantes Inactivos/Suspendidos: <strong><?php echo $mysqli->query("SELECT COUNT(id) FROM estudiantes WHERE estado != 'Activo'")->fetch_row()[0]; ?></strong></p>
                             </div>
                         </div>
                     </div>
@@ -472,136 +324,72 @@ include __DIR__ . '/side_bar_director.php';
         </div>
     </div>
 
-<!-- Add Student Modal -->
-<div class="modal fade" id="addStudentModal" tabindex="-1" aria-labelledby="addStudentModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header card-header-academic text-white">
-                <h5 class="modal-title" id="addStudentModalLabel">Agregar Nuevo Estudiante</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+    <!-- INICIO: MODAL PARA AGREGAR ESTUDIANTE RESTAURADO -->
+    <div class="modal fade" id="addStudentModal" tabindex="-1" aria-labelledby="addStudentModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header card-header-academic text-white">
+                    <h5 class="modal-title" id="addStudentModalLabel">Agregar Nuevo Estudiante</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form action="guardar_estudiante.php" method="POST" enctype="multipart/form-data">
+                    <div class="modal-body">
+                        <!-- Nombres y Apellidos -->
+                        <div class="row mb-3">
+                            <div class="col-md-6"><label for="studentName" class="form-label">Nombres</label><input type="text" class="form-control" name="studentName" required></div>
+                            <div class="col-md-6"><label for="studentLastName" class="form-label">Apellidos</label><input type="text" class="form-control" name="studentLastName" required></div>
+                        </div>
+                        <!-- Código y Email -->
+                        <div class="row mb-3">
+                            <div class="col-md-6"><label for="studentID" class="form-label">Código de Estudiante</label><input type="text" class="form-control" name="studentID" required></div>
+                            <div class="col-md-6"><label for="studentEmail" class="form-label">Correo Electrónico (Login)</label><input type="email" class="form-control" name="studentEmail" required></div>
+                        </div>
+                        <!-- Fecha Nacimiento y Género -->
+                        <div class="row mb-3">
+                            <div class="col-md-6"><label for="studentBirthdate" class="form-label">Fecha de Nacimiento</label><input type="date" class="form-control" name="studentBirthdate" required></div>
+                            <div class="col-md-6"><label for="studentGender" class="form-label">Género</label><select class="form-select" name="studentGender" required><option value="" selected disabled>Seleccionar...</option><option value="Masculino">Masculino</option><option value="Femenino">Femenino</option><option value="Otro">Otro</option></select></div>
+                        </div>
+                        <!-- Grado y Sección -->
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="studentGrade" class="form-label">Grado</label>
+                                <select class="form-select" name="grado_id" required>
+                                    <option value="" selected disabled>Seleccionar grado...</option>
+                                    <?php foreach ($grados_lista as $grado): ?>
+                                    <option value="<?php echo $grado['id']; ?>"><?php echo htmlspecialchars($grado['nombre']); ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="col-md-6"><label for="studentSection" class="form-label">Sección</label><select class="form-select" name="studentSection" required><option value="" selected disabled>Seleccionar...</option><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option></select></div>
+                        </div>
+                        <!-- Teléfono y Dirección -->
+                        <div class="row mb-3">
+                           <div class="col-md-6"><label for="studentPhone" class="form-label">Teléfono</label><input type="tel" class="form-control" name="studentPhone"></div>
+                           <div class="col-md-6"><label for="studentAddress" class="form-label">Dirección</label><input type="text" class="form-control" name="studentAddress" required></div>
+                        </div>
+                        <!-- Info del Tutor -->
+                         <div class="row mb-3">
+                            <div class="col-md-6"><label for="parentName" class="form-label">Nombre del Tutor</label><input type="text" class="form-control" name="parentName" required></div>
+                            <div class="col-md-6"><label for="parentPhone" class="form-label">Teléfono del Tutor</label><input type="tel" class="form-control" name="parentPhone" required></div>
+                        </div>
+                        <!-- Fechas y Estado -->
+                        <div class="row mb-3">
+                            <div class="col-md-6"><label for="enrollmentDate" class="form-label">Fecha de Inscripción</label><input type="date" class="form-control" name="enrollmentDate" required></div>
+                            <div class="col-md-6"><label for="studentStatus" class="form-label">Estado</label><select class="form-select" name="studentStatus" required><option value="Activo" selected>Activo</option><option value="Inactivo">Inactivo</option><option value="Suspendido">Suspendido</option></select></div>
+                        </div>
+                        <!-- Foto y Observaciones -->
+                        <div class="mb-3"><label for="studentPhoto" class="form-label">Fotografía</label><input class="form-control" type="file" name="studentPhoto"></div>
+                        <div class="mb-3"><label for="studentNotes" class="form-label">Observaciones</label><textarea class="form-control" name="studentNotes" rows="3"></textarea></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-academic">Guardar Estudiante</button>
+                    </div>
+                </form>
             </div>
-            <!-- INICIO DEL FORMULARIO MODIFICADO -->
-            <form action="guardar_estudiante.php" method="POST" enctype="multipart/form-data">
-                <div class="modal-body">
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <label for="studentName" class="form-label">Nombre Completo</label>
-                            <!-- El 'name' es crucial -->
-                            <input type="text" class="form-control" id="studentName" name="studentName" placeholder="Ej: Ana Sofía" required>
-                        </div>
-                        <div class="col-md-6">
-                            <label for="studentLastName" class="form-label">Apellidos</label>
-                            <input type="text" class="form-control" id="studentLastName" name="studentLastName" placeholder="Ej: Pérez García" required>
-                        </div>
-                    </div>
-                     <div class="row mb-3">
-                        <div class="col-md-6">
-                            <label for="studentID" class="form-label">Código de Estudiante</label>
-                            <input type="text" class="form-control" id="studentID" name="studentID" required>
-                        </div>
-                        <div class="col-md-6">
-                            <label for="studentEmail" class="form-label">Correo Electrónico (para login)</label>
-                            <input type="email" class="form-control" id="studentEmail" name="studentEmail" required>
-                        </div>
-                    </div>
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <label for="studentBirthdate" class="form-label">Fecha de Nacimiento</label>
-                            <input type="date" class="form-control" id="studentBirthdate" name="studentBirthdate" required>
-                        </div>
-                        <div class="col-md-6">
-                            <label for="studentGender" class="form-label">Género</label>
-                            <select class="form-select" id="studentGender" name="studentGender" required>
-                                <option value="" selected disabled>Seleccionar género</option>
-                                <option value="Masculino">Masculino</option>
-                                <option value="Femenino">Femenino</option>
-                                <option value="Otro">Otro</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <label for="studentGrade" class="form-label">Grado</label>
-                            <select class="form-select" id="studentGrade" name="studentGrade" required>
-                                <option value="" selected disabled>Seleccionar grado</option>
-                                <option value="1P">1° Primaria</option>
-                                <option value="2P">2° Primaria</option>
-                                <option value="3P">3° Primaria</option>
-                                <option value="4P">4° Primaria</option>
-                                <option value="5P">5° Primaria</option>
-                                <option value="6P">6° Primaria</option>
-                                <option value="1S">1° Secundaria</option>
-                                <option value="2S">2° Secundaria</option>
-                                <option value="3S">3° Secundaria</option>
-                                <option value="4S">4° Secundaria</option>
-                                <option value="5S">5° Secundaria</option>
-                                <option value="6S">6° Secundaria</option>
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            <label for="studentSection" class="form-label">Sección</label>
-                            <select class="form-select" id="studentSection" name="studentSection" required>
-                                <option value="" selected disabled>Seleccionar sección</option>
-                                <option value="A">A</option>
-                                <option value="B">B</option>
-                                <option value="C">C</option>
-                                <option value="D">D</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <label for="studentPhone" class="form-label">Teléfono</label>
-                            <input type="tel" class="form-control" id="studentPhone" name="studentPhone">
-                        </div>
-                        <div class="col-md-6">
-                            <label for="studentAddress" class="form-label">Dirección</label>
-                            <input type="text" class="form-control" id="studentAddress" name="studentAddress" required>
-                        </div>
-                    </div>
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <label for="parentName" class="form-label">Nombre del Padre/Madre/Tutor</label>
-                            <input type="text" class="form-control" id="parentName" name="parentName" required>
-                        </div>
-                        <div class="col-md-6">
-                            <label for="parentPhone" class="form-label">Teléfono del Padre/Madre/Tutor</label>
-                            <input type="tel" class="form-control" id="parentPhone" name="parentPhone" required>
-                        </div>
-                    </div>
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <label for="enrollmentDate" class="form-label">Fecha de Inscripción</label>
-                            <input type="date" class="form-control" id="enrollmentDate" name="enrollmentDate" required>
-                        </div>
-                        <div class="col-md-6">
-                            <label for="studentStatus" class="form-label">Estado</label>
-                            <select class="form-select" id="studentStatus" name="studentStatus" required>
-                                <option value="Activo" selected>Activo</option>
-                                <option value="Inactivo">Inactivo</option>
-                                <option value="Suspendido">Suspendido</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="mb-3">
-                        <label for="studentPhoto" class="form-label">Fotografía</label>
-                        <input class="form-control" type="file" id="studentPhoto" name="studentPhoto">
-                    </div>
-                    <div class="mb-3">
-                        <label for="studentNotes" class="form-label">Observaciones</label>
-                        <textarea class="form-control" id="studentNotes" name="studentNotes" rows="3"></textarea>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <!-- Cambiado a type="submit" para enviar el formulario -->
-                    <button type="submit" class="btn btn-academic">Guardar Estudiante</button>
-                </div>
-            </form>
-            <!-- FIN DEL FORMULARIO MODIFICADO -->
         </div>
     </div>
-</div>
+    <!-- FIN: MODAL PARA AGREGAR ESTUDIANTE RESTAURADO -->
 
     <!-- Scripts -->
     <script src="../js/jquery-3.3.1.min.js"></script>
