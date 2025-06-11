@@ -1,26 +1,88 @@
 <?php
 session_start();
 
-// Si no hay sesión activa, volvemos al login
 if (empty($_SESSION['user_id'])) {
     header('Location: ../index.php');
     exit;
 }
 
-// Conexión
 require_once '../config.php';
 
-// Obtener nombre y apellido
+$profesor_user_id = $_SESSION['user_id'];
+
+// 1. Obtener datos básicos del profesor
 $stmt = $mysqli->prepare("
-    SELECT nombre, apellido
-      FROM usuarios
-     WHERE id = ?
+    SELECT p.id as profesor_id, u.nombre, u.apellido
+    FROM usuarios u
+    JOIN profesores p ON u.id = p.usuario_id
+    WHERE u.id = ?
 ");
-$stmt->bind_param('i', $_SESSION['user_id']);
+$stmt->bind_param('i', $profesor_user_id);
 $stmt->execute();
-$stmt->bind_result($nombre, $apellido);
-$stmt->fetch();
+$profesor_data = $stmt->get_result()->fetch_assoc();
+$profesor_id = $profesor_data['profesor_id'];
+$nombre = $profesor_data['nombre'];
+$apellido = $profesor_data['apellido'];
 $stmt->close();
+
+// 2. Obtener los cursos del profesor para el selector
+$cursos_profesor = [];
+$stmt_cursos = $mysqli->prepare("
+    SELECT c.id, c.nombre, g.nombre AS grado
+    FROM cursos c
+    JOIN grados g ON c.grado_id = g.id
+    WHERE c.profesor_id = ? AND c.estatus = 'Activo'
+    ORDER BY g.id, c.nombre
+");
+$stmt_cursos->bind_param('i', $profesor_id);
+$stmt_cursos->execute();
+$result_cursos = $stmt_cursos->get_result();
+while ($row = $result_cursos->fetch_assoc()) {
+    $cursos_profesor[] = $row;
+}
+$stmt_cursos->close();
+
+// 3. Determinar el curso y la fecha seleccionados
+// Si no hay curso en la URL, se selecciona el primero de la lista. Si no hay fecha, se usa la de hoy.
+$curso_id_seleccionado = $_GET['curso_id'] ?? ($cursos_profesor[0]['id'] ?? null);
+$fecha_seleccionada = $_GET['fecha'] ?? date('Y-m-d');
+$curso_seleccionado_info = null;
+
+// 4. Obtener la lista de estudiantes del curso y su asistencia para la fecha seleccionada
+$lista_asistencia = [];
+if ($curso_id_seleccionado) {
+    // Buscar la información del curso seleccionado
+    foreach ($cursos_profesor as $curso) {
+        if ($curso['id'] == $curso_id_seleccionado) {
+            $curso_seleccionado_info = $curso;
+            break;
+        }
+    }
+
+    $stmt_asistencia = $mysqli->prepare("
+        SELECT 
+            e.id AS estudiante_id,
+            u.nombre,
+            u.apellido,
+            e.codigo_estudiante,
+            m.id AS matricula_id,
+            a.estado -- QUITAR a.observaciones de aquí
+        FROM matriculas m
+        JOIN estudiantes e ON m.estudiante_id = e.id
+        JOIN usuarios u ON e.usuario_id = u.id
+        LEFT JOIN asistencia a ON m.id = a.matricula_id AND a.fecha = ?
+        WHERE m.curso_id = ?
+        ORDER BY u.apellido, u.nombre
+    ");
+    $stmt_asistencia->bind_param('si', $fecha_seleccionada, $curso_id_seleccionado);
+    $stmt_asistencia->execute();
+    $result_asistencia = $stmt_asistencia->get_result();
+    while ($row = $result_asistencia->fetch_assoc()) {
+        $lista_asistencia[] = $row;
+    }
+    $stmt_asistencia->close();
+}
+
 include __DIR__ . '/side_bar_profesor.php';
 ?>
 <!DOCTYPE html>
@@ -43,6 +105,23 @@ include __DIR__ . '/side_bar_profesor.php';
             <div class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
                 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
                     <h1 class="h2">Control de Asistencia</h1>
+                    <!-- INICIO: Bloque para mostrar mensajes de sesión -->
+<?php if (isset($_SESSION['success_message'])): ?>
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <?php echo $_SESSION['success_message']; ?>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    <?php unset($_SESSION['success_message']); ?>
+<?php endif; ?>
+
+<?php if (isset($_SESSION['error_message'])): ?>
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <?php echo $_SESSION['error_message']; ?>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    <?php unset($_SESSION['error_message']); ?>
+<?php endif; ?>
+<!-- FIN: Bloque para mostrar mensajes -->
                     <div class="btn-toolbar mb-2 mb-md-0">
                         <div class="position-relative me-3">
                             <i class="bi bi-bell fs-4"></i>
@@ -63,48 +142,36 @@ include __DIR__ . '/side_bar_profesor.php';
                     </div>
                 </div>
 
-                <!-- Filter and Search -->
-                <div class="row mb-4">
-                    <div class="col-md-3">
-                        <div class="input-group">
-                            <span class="input-group-text">Curso</span>
-                            <select class="form-select" id="courseSelect">
-                                <option selected>Matemáticas - 6° Secundaria</option>
-                                <option>Matemáticas - 5° Secundaria</option>
-                                <option>Física - 6° Secundaria</option>
-                                <option>Física - 5° Secundaria</option>
-                                <option>Química - 6° Secundaria</option>
-                                <option>Química - 5° Secundaria</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="input-group">
-                            <span class="input-group-text">Fecha</span>
-                            <input type="date" class="form-control" value="2025-06-02">
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="input-group">
-                            <span class="input-group-text">Periodo</span>
-                            <select class="form-select">
-                                <option selected>Junio 2025</option>
-                                <option>Mayo 2025</option>
-                                <option>Abril 2025</option>
-                                <option>Marzo 2025</option>
-                                <option>Febrero 2025</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="input-group">
-                            <input type="text" class="form-control" placeholder="Buscar estudiante...">
-                            <button class="btn btn-academic" type="button">
-                                <i class="bi bi-search"></i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
+<!-- Filter and Search -->
+<form action="profesor_asistencia.php" method="GET" class="row mb-4">
+    <div class="col-md-5">
+        <div class="input-group">
+            <span class="input-group-text">Curso</span>
+            <select class="form-select" id="courseSelect" name="curso_id" onchange="this.form.submit()">
+                <?php if (empty($cursos_profesor)): ?>
+                    <option disabled selected>No tienes cursos asignados</option>
+                <?php else: ?>
+                    <?php foreach ($cursos_profesor as $curso): ?>
+                        <option value="<?php echo $curso['id']; ?>" <?php echo ($curso_id_seleccionado == $curso['id']) ? 'selected' : ''; ?>>
+                            <?php echo htmlspecialchars($curso['nombre'] . ' - ' . $curso['grado']); ?>
+                        </option>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </select>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="input-group">
+            <span class="input-group-text">Fecha</span>
+            <input type="date" class="form-control" name="fecha" value="<?php echo htmlspecialchars($fecha_seleccionada); ?>">
+        </div>
+    </div>
+    <div class="col-md-3">
+        <button type="submit" class="btn btn-academic w-100">
+            <i class="bi bi-search"></i> Cargar Asistencia
+        </button>
+    </div>
+</form>
 
                 <!-- Action Buttons -->
                 <div class="row mb-4">
@@ -116,136 +183,66 @@ include __DIR__ . '/side_bar_profesor.php';
                     </div>
                 </div>
 
-                <!-- Today's Attendance -->
-                <div class="card mb-4">
-                    <div class="card-header card-header-academic">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0 text-white">Asistencia de Hoy - Matemáticas 6° Secundaria</h5>
-                            <span class="badge bg-light text-dark">02/06/2025</span>
-                        </div>
-                    </div>
-                    <div class="card-body">
-                        <div class="table-responsive">
-                            <table class="table table-hover">
-                                <thead class="table-academic">
-                                    <tr>
-                                        <th>ID</th>
-                                        <th>Estudiante</th>
-                                        <th>Estado</th>
-                                        <th>Hora de Registro</th>
-                                        <th>Observaciones</th>
-                                        <th>Acciones</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td>EST-001</td>
-                                        <td>Alejandro Gómez</td>
-                                        <td>
-                                            <select class="form-select form-select-sm">
-                                                <option selected value="present">Presente</option>
-                                                <option value="late">Tardanza</option>
-                                                <option value="absent">Ausente</option>
-                                                <option value="justified">Justificado</option>
-                                            </select>
-                                        </td>
-                                        <td>08:15 AM</td>
-                                        <td>
-                                            <input type="text" class="form-control form-control-sm" placeholder="Observaciones...">
-                                        </td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-save"></i></button>
-                                            <button class="btn btn-sm btn-outline-info"><i class="bi bi-chat-dots"></i></button>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>EST-002</td>
-                                        <td>Carla Mendoza</td>
-                                        <td>
-                                            <select class="form-select form-select-sm">
-                                                <option selected value="present">Presente</option>
-                                                <option value="late">Tardanza</option>
-                                                <option value="absent">Ausente</option>
-                                                <option value="justified">Justificado</option>
-                                            </select>
-                                        </td>
-                                        <td>08:10 AM</td>
-                                        <td>
-                                            <input type="text" class="form-control form-control-sm" placeholder="Observaciones...">
-                                        </td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-save"></i></button>
-                                            <button class="btn btn-sm btn-outline-info"><i class="bi bi-chat-dots"></i></button>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>EST-003</td>
-                                        <td>Daniel Flores</td>
-                                        <td>
-                                            <select class="form-select form-select-sm">
-                                                <option value="present">Presente</option>
-                                                <option selected value="late">Tardanza</option>
-                                                <option value="absent">Ausente</option>
-                                                <option value="justified">Justificado</option>
-                                            </select>
-                                        </td>
-                                        <td>08:25 AM</td>
-                                        <td>
-                                            <input type="text" class="form-control form-control-sm" value="Llegó 15 minutos tarde">
-                                        </td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-save"></i></button>
-                                            <button class="btn btn-sm btn-outline-info"><i class="bi bi-chat-dots"></i></button>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>EST-004</td>
-                                        <td>Elena Vargas</td>
-                                        <td>
-                                            <select class="form-select form-select-sm">
-                                                <option selected value="present">Presente</option>
-                                                <option value="late">Tardanza</option>
-                                                <option value="absent">Ausente</option>
-                                                <option value="justified">Justificado</option>
-                                            </select>
-                                        </td>
-                                        <td>08:12 AM</td>
-                                        <td>
-                                            <input type="text" class="form-control form-control-sm" placeholder="Observaciones...">
-                                        </td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-save"></i></button>
-                                            <button class="btn btn-sm btn-outline-info"><i class="bi bi-chat-dots"></i></button>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>EST-005</td>
-                                        <td>Fernando Quispe</td>
-                                        <td>
-                                            <select class="form-select form-select-sm">
-                                                <option value="present">Presente</option>
-                                                <option value="late">Tardanza</option>
-                                                <option selected value="absent">Ausente</option>
-                                                <option value="justified">Justificado</option>
-                                            </select>
-                                        </td>
-                                        <td>-</td>
-                                        <td>
-                                            <input type="text" class="form-control form-control-sm" value="No asistió a clases">
-                                        </td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-save"></i></button>
-                                            <button class="btn btn-sm btn-outline-info"><i class="bi bi-chat-dots"></i></button>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                        <div class="d-flex justify-content-end mt-3">
-                            <button class="btn btn-academic">Guardar Todos los Cambios</button>
-                        </div>
-                    </div>
-                </div>
+<!-- Daily Attendance -->
+<div class="card mb-4">
+    <div class="card-header card-header-academic">
+        <div class="d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 text-white">
+                Asistencia: <?php echo htmlspecialchars($curso_seleccionado_info['nombre'] ?? 'Ningún curso seleccionado'); ?>
+            </h5>
+            <span class="badge bg-light text-dark"><?php echo date('d/m/Y', strtotime($fecha_seleccionada)); ?></span>
+        </div>
+    </div>
+    <div class="card-body">
+        <?php if (empty($lista_asistencia)): ?>
+            <p class="text-center">Por favor, seleccione un curso para tomar la asistencia.</p>
+        <?php else: ?>
+        <form action="guardar_asistencia.php" method="POST">
+            <!-- Campos ocultos para enviar el curso y la fecha -->
+            <input type="hidden" name="curso_id" value="<?php echo $curso_id_seleccionado; ?>">
+            <input type="hidden" name="fecha" value="<?php echo $fecha_seleccionada; ?>">
+
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead class="table-academic">
+                        <tr>
+                            <th>ID Estudiante</th>
+                            <th>Nombre</th>
+                            <th>Estado</th>
+                            <th>Observaciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($lista_asistencia as $asistencia): ?>
+                            <tr>
+                                <td><?php echo htmlspecialchars($asistencia['codigo_estudiante']); ?></td>
+                                <td><?php echo htmlspecialchars($asistencia['apellido'] . ', ' . $asistencia['nombre']); ?></td>
+                                <td>
+                                    <!-- El 'name' del select es un array para poder enviar todos los estados juntos -->
+                                    <select class="form-select form-select-sm" name="asistencia[<?php echo $asistencia['matricula_id']; ?>][estado]">
+                                        <option value="Presente" <?php if ($asistencia['estado'] == 'Presente' || !$asistencia['estado']) echo 'selected'; ?>>Presente</option>
+                                        <option value="Tarde" <?php if ($asistencia['estado'] == 'Tarde') echo 'selected'; ?>>Tardanza</option>
+                                        <option value="Ausente" <?php if ($asistencia['estado'] == 'Ausente') echo 'selected'; ?>>Ausente</option>
+                                    </select>
+                                </td>
+                                    <td>
+                                        <input type="text" class="form-control form-control-sm" 
+                                            name="asistencia[<?php echo $asistencia['matricula_id']; ?>][observaciones]" 
+                                            placeholder="Opcional..."
+                                            value="<?php echo htmlspecialchars($asistencia['observaciones'] ?? ''); ?>">
+                                    </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+            <div class="d-flex justify-content-end mt-3">
+                <button type="submit" class="btn btn-academic">Guardar Todos los Cambios</button>
+            </div>
+        </form>
+        <?php endif; ?>
+    </div>
+</div>
 
                 <!-- Monthly Attendance -->
                 <div class="card mb-4">

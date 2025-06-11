@@ -1,36 +1,38 @@
 <?php
 session_start();
 
-// Si no hay sesión activa, volvemos al login
 if (empty($_SESSION['user_id'])) {
     header('Location: ../index.php');
     exit;
 }
 
-// Conexión
 require_once '../config.php';
 
-// Obtener nombre y apellido
-$stmt = $mysqli->prepare("
-    SELECT nombre, apellido
-      FROM usuarios
-     WHERE id = ?
+$profesor_user_id = $_SESSION['user_id'];
+
+// 1. Obtener datos básicos del profesor
+$stmt_profesor = $mysqli->prepare("
+    SELECT p.id as profesor_id, u.nombre, u.apellido
+    FROM usuarios u
+    JOIN profesores p ON u.id = p.usuario_id
+    WHERE u.id = ?
 ");
-$stmt->bind_param('i', $_SESSION['user_id']);
-$stmt->execute();
-$stmt->bind_result($nombre, $apellido);
-$stmt->fetch();
-$stmt->close();
+$stmt_profesor->bind_param('i', $profesor_user_id);
+$stmt_profesor->execute();
+$profesor_data = $stmt_profesor->get_result()->fetch_assoc();
+$profesor_id = $profesor_data['profesor_id'];
+$nombre = $profesor_data['nombre'];
+$apellido = $profesor_data['apellido'];
+$stmt_profesor->close();
 
-// --- INICIO: Cargar los cursos asignados a este profesor ---
+// 2. Obtener los cursos del profesor para el filtro
 $cursos_profesor = [];
-$profesor_id = $_SESSION['user_id']; // El ID del profesor logueado
-
 $stmt_cursos = $mysqli->prepare("
-    SELECT id, nombre, grado, seccion 
-    FROM cursos 
-    WHERE profesor_id = ? AND estatus = 'Activo'
-    ORDER BY nombre, grado
+    SELECT c.id, c.nombre, g.nombre AS grado
+    FROM cursos c
+    JOIN grados g ON c.grado_id = g.id
+    WHERE c.profesor_id = ? AND c.estatus = 'Activo'
+    ORDER BY g.id, c.nombre
 ");
 $stmt_cursos->bind_param('i', $profesor_id);
 $stmt_cursos->execute();
@@ -39,7 +41,77 @@ while ($row = $result_cursos->fetch_assoc()) {
     $cursos_profesor[] = $row;
 }
 $stmt_cursos->close();
-// --- FIN: Cargar cursos ---
+
+
+// 3. Lógica de filtrado
+$curso_filtrado_id = $_GET['curso_id'] ?? null;
+$where_curso_sql = "";
+$params = [$profesor_id];
+$types = 'i';
+
+if (!empty($curso_filtrado_id) && is_numeric($curso_filtrado_id)) {
+    $where_curso_sql = "AND t.curso_id = ?";
+    $params[] = $curso_filtrado_id;
+    $types .= 'i';
+}
+
+
+// 4. Obtener las tareas del profesor con estadísticas de entrega
+$tareas = [];
+$sql_tareas = "
+    SELECT 
+        t.id as tarea_id, t.titulo, t.tipo, t.fecha_asignacion, t.fecha_entrega,
+        c.nombre AS curso_nombre,
+        g.nombre AS grado_nombre,
+        (SELECT COUNT(*) FROM matriculas WHERE curso_id = c.id) AS total_estudiantes,
+        (SELECT COUNT(*) FROM tarea_entregas te WHERE te.tarea_id = t.id) AS total_entregas,
+        (SELECT COUNT(*) FROM calificaciones cal JOIN tarea_entregas te ON cal.id = te.id WHERE te.tarea_id = t.id) AS total_calificadas
+    FROM tareas t
+    JOIN cursos c ON t.curso_id = c.id
+    JOIN grados g ON c.grado_id = g.id
+    WHERE c.profesor_id = ? {$where_curso_sql}
+    ORDER BY c.nombre, t.fecha_entrega DESC
+";
+
+$stmt_tareas = $mysqli->prepare($sql_tareas);
+$stmt_tareas->bind_param($types, ...$params);
+$stmt_tareas->execute();
+$result_tareas = $stmt_tareas->get_result();
+while ($row = $result_tareas->fetch_assoc()) {
+    $tareas[] = $row;
+}
+$stmt_tareas->close();
+
+// 5. Obtener las tareas pendientes de calificar
+$pendientes_calificar = [];
+$sql_pendientes = "
+    SELECT 
+        te.id as entrega_id,
+        t.id as tarea_id, t.titulo as tarea_titulo,
+        c.nombre as curso_nombre, 
+        g.nombre as grado_nombre, -- Ahora 'g' es conocido
+        u.nombre as estudiante_nombre, u.apellido as estudiante_apellido,
+        te.fecha_envio
+    FROM tarea_entregas te
+    JOIN tareas t ON te.tarea_id = t.id
+    JOIN cursos c ON t.curso_id = c.id
+    JOIN grados g ON c.grado_id = g.id  -- <<<<<<< AÑADIR ESTA LÍNEA DEL JOIN
+    JOIN matriculas m ON te.matricula_id = m.id
+    JOIN estudiantes e ON m.estudiante_id = e.id
+    JOIN usuarios u ON e.usuario_id = u.id
+    WHERE c.profesor_id = ? 
+      AND NOT EXISTS (SELECT 1 FROM calificaciones cal WHERE cal.id = te.id) -- Si no existe en calificaciones
+    ORDER BY te.fecha_envio ASC
+";
+
+$stmt_pendientes = $mysqli->prepare($sql_pendientes);
+$stmt_pendientes->bind_param('i', $profesor_id);
+$stmt_pendientes->execute();
+$result_pendientes = $stmt_pendientes->get_result();
+while ($row = $result_pendientes->fetch_assoc()) {
+    $pendientes_calificar[] = $row;
+}
+$stmt_pendientes->close();
 
 include __DIR__ . '/side_bar_profesor.php';
 ?>
@@ -101,54 +173,30 @@ include __DIR__ . '/side_bar_profesor.php';
                 <?php endif; ?>
                 <!-- FIN: Bloque para mostrar mensajes -->
 
-                <!-- Filter and Search -->
-                <div class="row mb-4">
-                    <div class="col-md-3">
-                        <div class="input-group">
-                            <span class="input-group-text">Curso</span>
-                            <select class="form-select" id="courseSelect">
-                                <option selected>Matemáticas - 6° Secundaria</option>
-                                <option>Matemáticas - 5° Secundaria</option>
-                                <option>Física - 6° Secundaria</option>
-                                <option>Física - 5° Secundaria</option>
-                                <option>Química - 6° Secundaria</option>
-                                <option>Química - 5° Secundaria</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="input-group">
-                            <span class="input-group-text">Estado</span>
-                            <select class="form-select">
-                                <option selected>Todos</option>
-                                <option>Activas</option>
-                                <option>Pendientes de calificar</option>
-                                <option>Calificadas</option>
-                                <option>Vencidas</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="input-group">
-                            <span class="input-group-text">Periodo</span>
-                            <select class="form-select">
-                                <option selected>Junio 2025</option>
-                                <option>Mayo 2025</option>
-                                <option>Abril 2025</option>
-                                <option>Marzo 2025</option>
-                                <option>Febrero 2025</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="input-group">
-                            <input type="text" class="form-control" placeholder="Buscar tarea...">
-                            <button class="btn btn-academic" type="button">
-                                <i class="bi bi-search"></i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
+<!-- Filter and Search -->
+<form action="profesor_tareas.php" method="GET" class="row mb-4">
+    <div class="col-md-4">
+        <div class="input-group">
+            <span class="input-group-text">Curso</span>
+            <!-- 'onchange' ELIMINADO -->
+            <select class="form-select" name="curso_id">
+                <option value="">Todos mis cursos</option>
+                <?php foreach ($cursos_profesor as $curso): ?>
+                    <option value="<?php echo $curso['id']; ?>" <?php if(isset($_GET['curso_id']) && $_GET['curso_id'] == $curso['id']) echo 'selected'; ?>>
+                        <?php echo htmlspecialchars($curso['nombre'] . ' - ' . $curso['grado']); ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+    </div>
+    <div class="col-md-8">
+        <div class="input-group">
+            <input type="text" name="q" class="form-control" placeholder="Buscar tarea por título..." value="<?php echo htmlspecialchars($_GET['q'] ?? ''); ?>">
+            <button class="btn btn-academic" type="submit"><i class="bi bi-search"></i> Filtrar</button>
+            <a href="profesor_tareas.php" class="btn btn-outline-secondary">Limpiar</a>
+        </div>
+    </div>
+</form>
 
                 <!-- Action Buttons -->
                 <div class="row mb-4">
@@ -160,177 +208,134 @@ include __DIR__ . '/side_bar_profesor.php';
                     </div>
                 </div>
 
-                <!-- Active Assignments -->
-                <div class="card mb-4">
-                    <div class="card-header card-header-academic">
-                        <h5 class="mb-0 text-white">Tareas Activas - Matemáticas 6° Secundaria</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="table-responsive">
-                            <table class="table table-hover">
-                                <thead class="table-academic">
-                                    <tr>
-                                        <th>Título</th>
-                                        <th>Tipo</th>
-                                        <th>Fecha de Asignación</th>
-                                        <th>Fecha de Entrega</th>
-                                        <th>Estado</th>
-                                        <th>Entregas</th>
-                                        <th>Calificadas</th>
-                                        <th>Acciones</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td>Ejercicios de Límites</td>
-                                        <td>Práctica</td>
-                                        <td>15/05/2025</td>
-                                        <td>22/05/2025</td>
-                                        <td><span class="badge bg-success">Completada</span></td>
-                                        <td>25/25</td>
-                                        <td>25/25</td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#viewAssignmentModal"><i class="bi bi-eye"></i></button>
-                                            <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></button>
-                                            <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>Derivadas Parciales</td>
-                                        <td>Tarea</td>
-                                        <td>22/05/2025</td>
-                                        <td>29/05/2025</td>
-                                        <td><span class="badge bg-primary">Calificando</span></td>
-                                        <td>23/25</td>
-                                        <td>15/23</td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></button>
-                                            <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></button>
-                                            <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>Integrales Definidas</td>
-                                        <td>Proyecto</td>
-                                        <td>29/05/2025</td>
-                                        <td>05/06/2025</td>
-                                        <td><span class="badge bg-warning">Activa</span></td>
-                                        <td>10/25</td>
-                                        <td>0/10</td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></button>
-                                            <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></button>
-                                            <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>Aplicaciones de Integrales</td>
-                                        <td>Tarea</td>
-                                        <td>01/06/2025</td>
-                                        <td>08/06/2025</td>
-                                        <td><span class="badge bg-warning">Activa</span></td>
-                                        <td>5/25</td>
-                                        <td>0/5</td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></button>
-                                            <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></button>
-                                            <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>Ecuaciones Diferenciales</td>
-                                        <td>Proyecto</td>
-                                        <td>05/06/2025</td>
-                                        <td>19/06/2025</td>
-                                        <td><span class="badge bg-info">Programada</span></td>
-                                        <td>0/25</td>
-                                        <td>0/0</td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></button>
-                                            <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></button>
-                                            <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
+<!-- Assignments List -->
+<div class="card mb-4">
+    <div class="card-header card-header-academic">
+        <h5 class="mb-0 text-white">
+            <?php 
+                $titulo_tabla = "Tareas Asignadas";
+                if ($curso_filtrado_id && !empty($cursos_profesor)) {
+                    foreach($cursos_profesor as $curso) {
+                        if ($curso['id'] == $curso_filtrado_id) {
+                            $titulo_tabla .= ' - ' . htmlspecialchars($curso['nombre'] . ' ' . $curso['grado']);
+                            break;
+                        }
+                    }
+                }
+                echo $titulo_tabla;
+            ?>
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead class="table-academic">
+                    <tr>
+                        <th>Título</th>
+                        <th>Curso</th>
+                        <th>Fecha de Entrega</th>
+                        <th>Estado</th>
+                        <th>Entregas</th>
+                        <th>Calificadas</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php if (empty($tareas)): ?>
+                        <tr>
+                            <td colspan="7" class="text-center">No hay tareas que coincidan con los filtros.</td>
+                        </tr>
+                    <?php else: ?>
+                        <?php foreach ($tareas as $tarea): ?>
+                            <?php
+                                // Lógica para determinar el estado de la tarea
+                                $estado = '';
+                                $badge_class = '';
+                                $hoy = new DateTime();
+                                $fecha_entrega = new DateTime($tarea['fecha_entrega']);
+                                $total_estudiantes = (int) $tarea['total_estudiantes'];
+                                $total_entregas = (int) $tarea['total_entregas'];
+                                $total_calificadas = (int) $tarea['total_calificadas'];
+                                
+                                if ($total_entregas == $total_estudiantes && $total_entregas == $total_calificadas && $total_estudiantes > 0) {
+                                    $estado = 'Completada';
+                                    $badge_class = 'bg-success';
+                                } elseif ($total_entregas > 0 && $total_calificadas < $total_entregas) {
+                                    $estado = 'Calificando';
+                                    $badge_class = 'bg-primary';
+                                } elseif ($hoy > $fecha_entrega) {
+                                    $estado = 'Vencida';
+                                    $badge_class = 'bg-danger';
+                                } else {
+                                    $estado = 'Activa';
+                                    $badge_class = 'bg-warning text-dark';
+                                }
+                            ?>
+                            <tr>
+                                <td><?php echo htmlspecialchars($tarea['titulo']); ?></td>
+                                <td><?php echo htmlspecialchars($tarea['curso_nombre'] . ' ' . $tarea['grado_nombre']); ?></td>
+                                <td><?php echo date('d/m/Y', strtotime($tarea['fecha_entrega'])); ?></td>
+                                <td><span class="badge <?php echo $badge_class; ?>"><?php echo $estado; ?></span></td>
+                                <td><?php echo $total_entregas . '/' . $total_estudiantes; ?></td>
+                                <td><?php echo $total_calificadas . '/' . $total_entregas; ?></td>
+                                <td>
+                                    <!-- Deberás implementar el modal dinámico con AJAX aquí -->
+                                    <button class="btn btn-sm btn-outline-primary" title="Ver Detalles y Entregas"><i class="bi bi-eye"></i></button>
+                                    <button class="btn btn-sm btn-outline-secondary" title="Editar Tarea"><i class="bi bi-pencil"></i></button>
+                                    <button class="btn btn-sm btn-outline-danger" title="Eliminar Tarea"><i class="bi bi-trash"></i></button>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
 
-                <!-- Pending Grading -->
-                <div class="card mb-4">
-                    <div class="card-header card-header-academic">
-                        <h5 class="mb-0 text-white">Tareas Pendientes de Calificar</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="table-responsive">
-                            <table class="table table-hover">
-                                <thead class="table-academic">
-                                    <tr>
-                                        <th>Curso</th>
-                                        <th>Tarea</th>
-                                        <th>Estudiante</th>
-                                        <th>Fecha de Entrega</th>
-                                        <th>Estado</th>
-                                        <th>Acciones</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td>Matemáticas - 6° Secundaria</td>
-                                        <td>Derivadas Parciales</td>
-                                        <td>Alejandro Gómez</td>
-                                        <td>28/05/2025</td>
-                                        <td><span class="badge bg-warning">Pendiente</span></td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#gradeAssignmentModal"><i class="bi bi-check-circle"></i> Calificar</button>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>Matemáticas - 6° Secundaria</td>
-                                        <td>Derivadas Parciales</td>
-                                        <td>Carla Mendoza</td>
-                                        <td>27/05/2025</td>
-                                        <td><span class="badge bg-warning">Pendiente</span></td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-check-circle"></i> Calificar</button>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>Matemáticas - 6° Secundaria</td>
-                                        <td>Derivadas Parciales</td>
-                                        <td>Daniel Flores</td>
-                                        <td>29/05/2025</td>
-                                        <td><span class="badge bg-warning">Pendiente</span></td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-check-circle"></i> Calificar</button>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>Matemáticas - 6° Secundaria</td>
-                                        <td>Derivadas Parciales</td>
-                                        <td>Elena Vargas</td>
-                                        <td>28/05/2025</td>
-                                        <td><span class="badge bg-warning">Pendiente</span></td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-check-circle"></i> Calificar</button>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>Matemáticas - 6° Secundaria</td>
-                                        <td>Derivadas Parciales</td>
-                                        <td>Fernando Quispe</td>
-                                        <td>29/05/2025</td>
-                                        <td><span class="badge bg-warning">Pendiente</span></td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-check-circle"></i> Calificar</button>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
+<!-- Pending Grading -->
+<div class="card mb-4">
+    <div class="card-header card-header-academic">
+        <h5 class="mb-0 text-white">Tareas Pendientes de Calificar</h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead class="table-academic">
+                    <tr>
+                        <th>Curso</th>
+                        <th>Tarea</th>
+                        <th>Estudiante</th>
+                        <th>Fecha de Entrega</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php if (empty($pendientes_calificar)): ?>
+                        <tr>
+                            <td colspan="5" class="text-center">¡Buen trabajo! No hay tareas pendientes de calificar.</td>
+                        </tr>
+                    <?php else: ?>
+                        <?php foreach ($pendientes_calificar as $pendiente): ?>
+                            <tr>
+                                <td><?php echo htmlspecialchars($pendiente['curso_nombre'] . ' - ' . $pendiente['grado_nombre']); ?></td>
+                                <td><?php echo htmlspecialchars($pendiente['tarea_titulo']); ?></td>
+                                <td><?php echo htmlspecialchars($pendiente['estudiante_apellido'] . ', ' . $pendiente['estudiante_nombre']); ?></td>
+                                <td><?php echo date('d/m/Y H:i', strtotime($pendiente['fecha_envio'])); ?></td>
+                                <td>
+                                    <!-- Este botón debería abrir un modal para calificar esa entrega específica -->
+                                    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#gradeAssignmentModal" data-entrega-id="<?php echo $pendiente['entrega_id']; ?>">
+                                        <i class="bi bi-check-circle"></i> Calificar
+                                    </button>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
 
                 <!-- Assignment Statistics -->
                 <div class="row mb-4">
