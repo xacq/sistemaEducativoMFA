@@ -7,7 +7,7 @@ use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
 require 'vendor/autoload.php'; // Si usas Composer
-// Si no, usa: require 'path/to/PHPMailer/src/Exception.php'; etc.
+//require './vendor/phpmailer/phpmailer/src/Exception.php'; 
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: index.php');
@@ -16,6 +16,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 $email    = trim($_POST['email']    ?? '');
 $password = $_POST['password'] ?? '';
+
 
 if (!$email || !$password) {
     bad('Email y contraseña son obligatorios.');
@@ -37,6 +38,18 @@ $user = $result->fetch_assoc();
 if (!password_verify($password, $user['password'])) {
     bad('Credenciales inválidas.');
 }
+
+// --- AÑADE ESTA CORRECCIÓN AQUÍ ---
+// 2.1) ¡NUEVO! Verificar si el email ha sido activado
+$stmt_verified = $mysqli->prepare("SELECT email_verified_at FROM usuarios WHERE id = ?");
+$stmt_verified->bind_param('i', $user['id']);
+$stmt_verified->execute();
+$result_verified = $stmt_verified->get_result()->fetch_assoc();
+
+if ($result_verified['email_verified_at'] === null) {
+    bad('Tu cuenta está registrada, pero debes activar tu cuenta haciendo clic en el enlace que enviamos a tu correo electrónico antes de poder iniciar sesión.');
+}
+// --- FIN DE LA CORRECCIÓN ---
 
 // 3) CAMBIO MFA: Las credenciales son correctas. Ahora iniciamos el flujo MFA.
 // =========================================================================

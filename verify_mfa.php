@@ -33,7 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error_message = 'El código introducido es incorrecto.';
         } elseif ($current_time > $expiry_time) {
             $error_message = 'El código ha expirado. Por favor, intenta iniciar sesión de nuevo.';
-        } else {
+        }else {
             // ¡Éxito! El código es correcto y no ha expirado.
             
             // 3) Limpiar el código MFA de la base de datos para que no se pueda reutilizar
