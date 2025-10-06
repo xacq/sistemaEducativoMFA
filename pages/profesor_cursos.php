@@ -122,7 +122,7 @@ include __DIR__ . '/side_bar_profesor.php';
                             </button>
                             <ul class="dropdown-menu dropdown-menu-end">
                                 <li><a class="dropdown-item" href="profesor_perfil.php">Mi Perfil</a></li>
-                                <li><a class="dropdown-item" href="../index.php">Cerrar Sesión</a></li>
+                                <li><a class="dropdown-item" href="../logout.php">Cerrar Sesión</a></li>
                             </ul>
                         </div>
                     </div>
