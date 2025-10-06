@@ -1,3 +1,10 @@
+<?php
+session_start();
+$authError = $_SESSION['auth_error'] ?? null;
+$authSuccess = $_SESSION['auth_success'] ?? null;
+$lastEmail = $_SESSION['auth_email'] ?? '';
+unset($_SESSION['auth_error'], $_SESSION['auth_success'], $_SESSION['auth_email']);
+?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -31,7 +38,17 @@
                                     <h3>Sistema Académico</h3>
                                     <p class="text-muted">Ingrese sus credenciales para acceder</p>
                                 </div>
-                                <form class="login-form">
+                                <form class="login-form" id="loginForm" action="login.php" method="POST" novalidate>
+                                    <?php if ($authError): ?>
+                                        <div class="alert alert-danger" role="alert">
+                                            <?php echo htmlspecialchars($authError); ?>
+                                        </div>
+                                    <?php endif; ?>
+                                    <?php if ($authSuccess): ?>
+                                        <div class="alert alert-success" role="alert">
+                                            <?php echo htmlspecialchars($authSuccess); ?>
+                                        </div>
+                                    <?php endif; ?>
                                     <div class="mb-3">
                                         <label for="username" class="form-label">Usuario</label>
                                         <div class="input-group">
@@ -40,8 +57,10 @@
                                             type="text"
                                             class="form-control"
                                             id="username"
-                                            name="email" 
-                                            placeholder="Ingrese su email"    
+                                            name="email"
+                                            placeholder="Ingrese su email"
+                                            value="<?php echo htmlspecialchars($lastEmail); ?>"
+                                            required
                                         </div>
                                     </div>
                                     <div class="mb-3">
@@ -53,7 +72,8 @@
                                             class="form-control"
                                             id="password"
                                             name="password"
-                                            placeholder="Ingrese su contraseña"         
+                                            placeholder="Ingrese su contraseña"
+                                            required
                                         </div>
                                     </div>
                                     <div class="mb-3">
@@ -91,21 +111,6 @@
     <!-- Scripts -->
     <script src="js/jquery-3.3.1.min.js"></script>
     <script src="js/bootstrap.bundle.min.js"></script>
-    <script>
-        function login() {
-            const userType = document.getElementById('userType').value;
-            if (userType === 'estudiante') {
-                window.location.href = 'pages/estudiante_dashboard.php';
-            } else if (userType === 'profesor') {
-                window.location.href = 'pages/profesor_dashboard.php';
-            } else if (userType === 'director') {
-                window.location.href = 'pages/director_dashboard.php';
-            } else {
-                alert('Por favor seleccione un tipo de usuario');
-            }
-        }
-    </script>
-
     <!-- === Registro dinámico === -->
     <script>
         document.addEventListener('DOMContentLoaded', () => {
@@ -175,18 +180,36 @@
         }
     </script>
     <!-- === Fin Registro dinámico === -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const loginForm = document.getElementById('loginForm');
+            const emailField = document.getElementById('username');
+            const passwordField = document.getElementById('password');
+
+            if (loginForm) {
+                loginForm.addEventListener('submit', (event) => {
+                    const email = emailField.value.trim();
+                    const password = passwordField.value.trim();
+
+                    if (!email || !password) {
+                        event.preventDefault();
+                        showInlineAlert('Por favor ingrese su correo electrónico y contraseña.');
+                    }
+                });
+            }
+        });
+
+        function showInlineAlert(message) {
+            let alert = document.querySelector('#loginForm .alert-inline');
+            if (!alert) {
+                alert = document.createElement('div');
+                alert.className = 'alert alert-warning alert-inline';
+                const form = document.getElementById('loginForm');
+                form.insertBefore(alert, form.firstChild);
+            }
+            alert.textContent = message;
+        }
+    </script>
 </div>
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-  // 1) Localiza el formulario de login existente
-  const loginForm = document.querySelector('.login-form form');
-  if (!loginForm) return;
-
-  // 2) Cambia su acción y método
-  loginForm.action = 'login.php';
-  loginForm.method = 'POST';
-});
-</script>
-
-</body>
+    </body>
 </html>
