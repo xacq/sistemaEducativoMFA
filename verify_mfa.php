@@ -35,7 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error_message = 'El código ha expirado. Por favor, intenta iniciar sesión de nuevo.';
         }else {
             // ¡Éxito! El código es correcto y no ha expirado.
-            
+
             // 3) Limpiar el código MFA de la base de datos para que no se pueda reutilizar
             $stmt_clear = $mysqli->prepare("UPDATE usuarios SET mfa_code = NULL, mfa_expiry = NULL WHERE id = ?");
             $stmt_clear->bind_param('i', $user_id);
@@ -43,6 +43,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             // 4) Establecer la sesión de usuario final
             unset($_SESSION['mfa_user_id']); // Limpiar la sesión temporal
+            session_regenerate_id(true);
             $_SESSION['user_id'] = $user_id;
             $_SESSION['role_id'] = $user['role_id'];
 
