@@ -57,7 +57,6 @@ $stmtUpdate->close();
 
 //Este comentario solo activar en produccion
 /*$mail = new PHPMailer(true);
-
 try {
     $mail->isSMTP();
     $mail->Host       = 'smtp.gmail.com';
@@ -86,6 +85,7 @@ $_SESSION['auth_email'] = $email;
 
 header('Location: verify_mfa.php');
 exit;*/
+
 
 
 // esta seccion es solamente para desarollo local, eliminar en produccion
