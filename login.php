@@ -55,7 +55,8 @@ $stmtUpdate->bind_param('ssi', $mfa_code, $mfa_expiry, $user['id']);
 $stmtUpdate->execute();
 $stmtUpdate->close();
 
-$mail = new PHPMailer(true);
+//Este comentario solo activar en produccion
+/*$mail = new PHPMailer(true);
 
 try {
     $mail->isSMTP();
@@ -84,7 +85,23 @@ $_SESSION['mfa_user_id'] = $user['id'];
 $_SESSION['auth_email'] = $email;
 
 header('Location: verify_mfa.php');
+exit;*/
+
+
+// esta seccion es solamente para desarollo local, eliminar en produccion
+// ⚠️ Modo desarrollo: omitir envío de correo MFA
+$_SESSION['user_id'] = $user['id'];
+$_SESSION['role_id'] = $user['role_id'];
+
+// Redirige directamente al dashboard
+switch ($user['role_id']) {
+    case 1: header('Location: ./pages/director_dashboard.php'); break;
+    case 2: header('Location: ./pages/profesor_dashboard.php'); break;
+    case 3: header('Location: ./pages/estudiante_dashboard.php'); break;
+    default: header('Location: ./index.php'); break;
+}
 exit;
+//fin seccion dev
 
 function redirectWithError(string $message, string $email): void
 {

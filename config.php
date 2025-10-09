@@ -1,7 +1,7 @@
 <?php
 // config.php
 $host = 'localhost';
-$db   = 'sistema_academico_final';
+$db   = 'sistema_academico_final_mfa';
 $user = 'root';
 $pass = '';
 $mysqli = new mysqli($host, $user, $pass, $db);
