@@ -51,9 +51,18 @@ if (!$stmtUpdate) {
     redirectWithError('No se pudo generar el código de verificación. Intente nuevamente.', $email);
 }
 
+
 $stmtUpdate->bind_param('ssi', $mfa_code, $mfa_expiry, $user['id']);
 $stmtUpdate->execute();
 $stmtUpdate->close();
+
+$mail = new PHPMailer(true);
+=======
+
+$stmtUpdate->bind_param('ssi', $mfa_code, $mfa_expiry, $user['id']);
+$stmtUpdate->execute();
+$stmtUpdate->close();
+
 
 //Este comentario solo activar en produccion
 /*$mail = new PHPMailer(true);
@@ -88,6 +97,8 @@ exit;*/
 
 
 
+
+=======
 // esta seccion es solamente para desarollo local, eliminar en produccion
 // ⚠️ Modo desarrollo: omitir envío de correo MFA
 $_SESSION['user_id'] = $user['id'];
@@ -102,6 +113,7 @@ switch ($user['role_id']) {
 }
 exit;
 //fin seccion dev
+
 
 function redirectWithError(string $message, string $email): void
 {
