@@ -57,11 +57,6 @@ $stmtUpdate->execute();
 $stmtUpdate->close();
 
 $mail = new PHPMailer(true);
-=======
-
-$stmtUpdate->bind_param('ssi', $mfa_code, $mfa_expiry, $user['id']);
-$stmtUpdate->execute();
-$stmtUpdate->close();
 
 
 //Este comentario solo activar en produccion
@@ -98,7 +93,6 @@ exit;*/
 
 
 
-=======
 // esta seccion es solamente para desarollo local, eliminar en produccion
 // ⚠️ Modo desarrollo: omitir envío de correo MFA
 $_SESSION['user_id'] = $user['id'];

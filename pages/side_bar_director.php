@@ -10,62 +10,62 @@
     </div>
     <ul class="nav flex-column">
       <li class="nav-item">
-        <a class="nav-link" href="/sistema_academico_final/pages/director_dashboard.php">
+        <a class="nav-link" href="./director_dashboard.php">
           <i class="bi bi-house-door me-2"></i> Dashboard
         </a>
       </li>
       <li class="nav-item">
-        <a class="nav-link" href="/sistema_academico_final/pages/director_profesores.php">
+        <a class="nav-link" href="./director_profesores.php">
           <i class="bi bi-person-badge me-2"></i> Profesores
         </a>
       </li>
       <li class="nav-item">
-        <a class="nav-link" href="/sistema_academico_final/pages/director_estudiantes.php">
+        <a class="nav-link" href="./director_estudiantes.php">
           <i class="bi bi-people me-2"></i> Estudiantes
         </a>
       </li>
       <li class="nav-item">
-        <a class="nav-link" href="/sistema_academico_final/pages/director_cursos.php">
+        <a class="nav-link" href="./director_cursos.php">
           <i class="bi bi-book me-2"></i> Cursos
         </a>
       </li>
       <li class="nav-item">
-        <a class="nav-link" href="/sistema_academico_final/pages/director_materias.php">
+        <a class="nav-link" href="./director_materias.php">
           <i class="bi bi-journal-text me-2"></i> Materias
         </a>
       </li>
       <li class="nav-item">
-        <a class="nav-link" href="/sistema_academico_final/pages/director_horarios.php">
+        <a class="nav-link" href="./director_horarios.php">
           <i class="bi bi-calendar3 me-2"></i> Horarios
         </a>
       </li>
       <li class="nav-item">
-        <a class="nav-link" href="/sistema_academico_final/pages/director_matriculas.php">
+        <a class="nav-link" href="./director_matriculas.php">
           <i class="bi bi-people me-2"></i> Matrículas
         </a>
       </li>
       <li class="nav-item">
-        <a class="nav-link" href="/sistema_academico_final/pages/director_calificaciones.php">
+        <a class="nav-link" href="./director_calificaciones.php">
           <i class="bi bi-award me-2"></i> Calificaciones
         </a>
       </li>
       <li class="nav-item">
-        <a class="nav-link" href="/sistema_academico_final/pages/director_asistencia.php">
+        <a class="nav-link" href="./director_asistencia.php">
           <i class="bi bi-calendar-check me-2"></i> Asistencia
         </a>
       </li>
       <li class="nav-item">
-        <a class="nav-link" href="/sistema_academico_final/pages/director_reportes.php">
+        <a class="nav-link" href="./director_reportes.php">
           <i class="bi bi-file-earmark-bar-graph me-2"></i> Reportes
         </a>
       </li>
       <li class="nav-item">
-        <a class="nav-link" href="/sistema_academico_final/pages/director_configuracion.php">
+        <a class="nav-link" href="./director_configuracion.php">
           <i class="bi bi-gear me-2"></i> Configuración
         </a>
       </li>
       <li class="nav-item mt-5">
-        <a class="nav-link" href="/sistema_academico_final/logout.php">
+        <a class="nav-link" href="./logout.php">
           <i class="bi bi-box-arrow-left me-2"></i> Cerrar Sesión
         </a>
       </li>
