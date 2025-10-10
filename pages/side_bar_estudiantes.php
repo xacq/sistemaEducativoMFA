@@ -39,12 +39,14 @@
                 </a>
             </li>
             <li class="nav-item">
+
                 <a class="nav-link" href="estudiante_materiales.php">
                     <i class="bi bi-archive me-2"></i>
                     Materiales
                 </a>
             </li>
             <li class="nav-item">
+
                 <a class="nav-link" href="estudiante_perfil.php">
                     <i class="bi bi-person me-2"></i>
                     Mi Perfil

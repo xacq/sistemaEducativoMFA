@@ -268,6 +268,82 @@ include __DIR__ . '/side_bar_profesor.php';
                         <li><hr class="dropdown-divider"></li>
                         <li><a class="dropdown-item" href="../logout.php">Cerrar Sesión</a></li>
                     </ul>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            
+            <!-- Main content -->
+            <div class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
+                <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                    <h1 class="h2">Materiales Educativos</h1>
+                    <div class="btn-toolbar mb-2 mb-md-0">
+                        <div class="position-relative me-3">
+                            <i class="bi bi-bell fs-4"></i>
+                            <span class="notification-badge">5</span>
+                        </div>
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="dropdownMenuButton" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="bi bi-person-circle me-1"></i>
+                                <?php echo htmlspecialchars($nombre . ' ' . $apellido, ENT_QUOTES, 'UTF-8'); ?>
+                            </button>
+                            <ul class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+                                <li><a class="dropdown-item" href="profesor_perfil.php">Mi Perfil</a></li>
+                                <li><a class="dropdown-item" href="profesor_configuracion.php">Configuración</a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="../logout.php">Cerrar Sesión</a></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Filter and Search -->
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <div class="input-group">
+                            <span class="input-group-text">Curso</span>
+                            <select class="form-select" id="courseSelect">
+                                <option selected>Matemáticas - 6° Secundaria</option>
+                                <option>Matemáticas - 5° Secundaria</option>
+                                <option>Física - 6° Secundaria</option>
+                                <option>Física - 5° Secundaria</option>
+                                <option>Química - 6° Secundaria</option>
+                                <option>Química - 5° Secundaria</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="input-group">
+                            <span class="input-group-text">Tipo</span>
+                            <select class="form-select">
+                                <option selected>Todos</option>
+                                <option>Presentaciones</option>
+                                <option>Documentos</option>
+                                <option>Videos</option>
+                                <option>Enlaces</option>
+                                <option>Otros</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="input-group">
+                            <span class="input-group-text">Unidad</span>
+                            <select class="form-select">
+                                <option selected>Todas</option>
+                                <option>Unidad 1</option>
+                                <option>Unidad 2</option>
+                                <option>Unidad 3</option>
+                                <option>Unidad 4</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="input-group">
+                            <input type="text" class="form-control" placeholder="Buscar material...">
+                            <button class="btn btn-academic" type="button">
+                                <i class="bi bi-search"></i>
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
 

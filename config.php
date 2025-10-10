@@ -9,5 +9,5 @@ if ($mysqli->connect_error) {
     die('Error de conexión (' . $mysqli->connect_errno . ') ' . $mysqli->connect_error);
 }
 $mysqli->set_charset('utf8mb4');
-define('BASE_URL', 'http://localhost/sistema_academico_final');
+define('BASE_URL', 'http://localhost/sistema_academico_final'); // Ajusta según tu entorno local
 ?>
