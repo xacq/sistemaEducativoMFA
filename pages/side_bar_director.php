@@ -30,6 +30,21 @@
         </a>
       </li>
       <li class="nav-item">
+        <a class="nav-link" href="/sistema_academico_final/pages/director_materias.php">
+          <i class="bi bi-journal-text me-2"></i> Materias
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="/sistema_academico_final/pages/director_horarios.php">
+          <i class="bi bi-calendar3 me-2"></i> Horarios
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="/sistema_academico_final/pages/director_matriculas.php">
+          <i class="bi bi-people me-2"></i> Matrículas
+        </a>
+      </li>
+      <li class="nav-item">
         <a class="nav-link" href="/sistema_academico_final/pages/director_calificaciones.php">
           <i class="bi bi-award me-2"></i> Calificaciones
         </a>
@@ -50,7 +65,7 @@
         </a>
       </li>
       <li class="nav-item mt-5">
-        <a class="nav-link" href="/sistema_academico_final/index.php">
+        <a class="nav-link" href="/sistema_academico_final/logout.php">
           <i class="bi bi-box-arrow-left me-2"></i> Cerrar Sesión
         </a>
       </li>
