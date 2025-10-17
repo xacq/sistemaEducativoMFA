@@ -317,7 +317,7 @@ include __DIR__ . '/side_bar_director.php';
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <form action="guardar_profesor.php" method="POST" enctype="multipart/form-data">
+                    <form action="./crear_profesor.php" method="POST" enctype="multipart/form-data">
                         <!-- ... (contenido completo del formulario del modal, como en la respuesta anterior) ... -->
                         <h6 class="text-primary">Información de Usuario</h6><hr class="mt-0">
                         <div class="row mb-3"><div class="col-md-4"><label for="prof_nombre" class="form-label">Nombres</label><input type="text" class="form-control" id="prof_nombre" name="nombre" required></div><div class="col-md-4"><label for="prof_apellido" class="form-label">Apellidos</label><input type="text" class="form-control" id="prof_apellido" name="apellido" required></div><div class="col-md-4"><label for="prof_email" class="form-label">Correo Electrónico</label><input type="email" class="form-control" id="prof_email" name="email" required></div></div>
