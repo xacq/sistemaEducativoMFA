@@ -317,7 +317,7 @@ include __DIR__ . '/side_bar_director.php';
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <form action="./crear_profesor.php" method="POST" enctype="multipart/form-data">
+                    <form id="formNuevoProfesor" action="./crear_profesor.php" method="POST" enctype="multipart/form-data">
                         <!-- ... (contenido completo del formulario del modal, como en la respuesta anterior) ... -->
                         <h6 class="text-primary">Información de Usuario</h6><hr class="mt-0">
                         <div class="row mb-3"><div class="col-md-4"><label for="prof_nombre" class="form-label">Nombres</label><input type="text" class="form-control" id="prof_nombre" name="nombre" required></div><div class="col-md-4"><label for="prof_apellido" class="form-label">Apellidos</label><input type="text" class="form-control" id="prof_apellido" name="apellido" required></div><div class="col-md-4"><label for="prof_email" class="form-label">Correo Electrónico</label><input type="email" class="form-control" id="prof_email" name="email" required></div></div>
@@ -341,5 +341,59 @@ include __DIR__ . '/side_bar_director.php';
     <!-- Scripts -->
     <script src="../js/jquery-3.3.1.min.js"></script>
     <script src="../js/bootstrap.bundle.min.js"></script>
+    <script>
+    // --- Envío AJAX del formulario "Nuevo Profesor" ---
+    document.getElementById('formNuevoProfesor').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const form = e.target;
+        const data = new FormData(form);
+
+        // Deshabilitar el botón mientras se guarda
+        const submitBtn = form.querySelector('button[type="submit"]');
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Guardando...";
+
+        try {
+            const response = await fetch(form.action, { method: 'POST', body: data });
+            const result = await response.json();
+
+            // Cerrar el modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('newProfessorModal'));
+            modal.hide();
+
+            // Crear y mostrar mensaje flotante centrado
+            const box = document.createElement('div');
+            box.className = 'alert alert-info shadow position-fixed top-50 start-50 translate-middle text-center border border-primary';
+            box.style.zIndex = 2000;
+            box.style.minWidth = '420px';
+            box.innerHTML = `
+                <h5 class="mb-2">✅ Profesor registrado correctamente</h5>
+                <p class="mb-1">Enlace de activación (entregar al profesor):</p>
+                <a href="${result.activation_link}" target="_blank">${result.activation_link}</a>
+                <div class="mt-3">
+                    <button class="btn btn-primary btn-sm" onclick="this.closest('.alert').remove(); location.reload();">Cerrar</button>
+                </div>
+            `;
+            document.body.appendChild(box);
+        } catch (err) {
+            alert("Ocurrió un error al guardar el profesor. Revisa la consola.");
+            console.error(err);
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = "Guardar Profesor";
+        }
+    });
+    </script>
+
+    <style>
+    .alert.position-fixed {
+        animation: aparecer 0.3s ease-out;
+    }
+    @keyframes aparecer {
+        from { opacity: 0; transform: translate(-50%, -40%); }
+        to { opacity: 1; transform: translate(-50%, -50%); }
+    }
+    </style>
+
 </body>
 </html>

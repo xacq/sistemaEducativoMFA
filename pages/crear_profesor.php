@@ -112,15 +112,15 @@ if (!empty($materias)) {
 // 9) Generar enlace de activación dinámico (seguro para cualquier entorno)
 $base_url = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http")
             . "://" . $_SERVER['HTTP_HOST']
-            . dirname($_SERVER['PHP_SELF'], 2);
+            . rtrim(dirname($_SERVER['PHP_SELF'], 2), '/\\') . '/';
 
 $activation_link = "{$base_url}activar_cuenta.php?token={$token}";
 
 // 10) Mostrar enlace al director
-echo "<div class='alert alert-info' style='margin:20px; padding:15px; border:1px solid #bce8f1; background:#d9edf7; color:#31708f;'>
-<strong>Profesor registrado correctamente.</strong><br>
-Enlace de activación (entregar al profesor):<br>
-<a href='{$activation_link}' target='_blank'>{$activation_link}</a>
-</div>";
+echo json_encode([
+    'success' => true,
+    'message' => 'Profesor registrado correctamente.',
+    'activation_link' => $activation_link
+]);
 exit;
 ?>
