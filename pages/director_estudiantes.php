@@ -341,7 +341,7 @@ include __DIR__ . '/side_bar_director.php';
                         </div>
                         <!-- Código y Email -->
                         <div class="row mb-3">
-                            <div class="col-md-6"><label for="studentID"  class="form-label">Código de Estudiante</label><input  placeholder="generado automaticamente" class="form-control" name="studentID" readonly></div>
+                            <div class="col-md-6"><label for="studentID"  class="form-label">Código de Estudiante</label><input   class="form-control" name="studentID" readonly></div>
                             <div class="col-md-6"><label for="studentEmail" class="form-label">Correo Electrónico (Login)</label><input type="email" class="form-control" name="studentEmail" required></div>
                         </div>
                         <!-- Fecha Nacimiento y Género -->

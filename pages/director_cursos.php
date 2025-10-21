@@ -179,7 +179,17 @@ include __DIR__ . '/side_bar_director.php';
                                             <td>
                                                 <?php $estado = $curso['estatus']; $badge_class = ($estado == 'Activo') ? 'bg-success' : (($estado == 'Pendiente') ? 'bg-warning' : 'bg-danger'); echo "<span class='badge {$badge_class}'>{$estado}</span>"; ?>
                                             </td>
-                                            <td><button class="btn btn-sm btn-outline-primary" title="Ver"><i class="bi bi-eye"></i></button><button class="btn btn-sm btn-outline-secondary" title="Editar"><i class="bi bi-pencil"></i></button><button class="btn btn-sm btn-outline-danger" title="Eliminar"><i class="bi bi-trash"></i></button></td>
+                                            <td>
+                                                <button class="btn btn-sm btn-outline-primary btn-view-course" data-id="<?php echo $curso['id']; ?>" title="Ver Detalles">
+                                                    <i class="bi bi-eye"></i>
+                                                </button>
+                                                <button class="btn btn-sm btn-outline-secondary btn-edit-course" title="Editar" data-id="<?php echo $curso['id']; ?>" title="Editar">
+                                                    <i class="bi bi-pencil"></i>
+                                                </button>
+                                                <button class="btn btn-sm btn-outline-danger btn-disable-course" title="Eliminar" data-id="<?php echo $curso['id']; ?>" title="Deshabilitar">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </td>
                                         </tr>
                                         <?php endforeach; ?>
                                     <?php endif; ?>
@@ -236,7 +246,7 @@ include __DIR__ . '/side_bar_director.php';
                     <div class="row mb-3">
                         <div class="col-md-6">
                             <label for="courseCode" class="form-label">Código del Curso</label>
-                            <input type="text" class="form-control" name="codigo" required>
+                            <input type="text" placeholder="generado automaticamente" class="form-control" name="codigo" readonly >
                         </div>
                         <div class="col-md-6">
                             <label for="courseName" class="form-label">Nombre del Curso</label>
@@ -333,7 +343,292 @@ include __DIR__ . '/side_bar_director.php';
     </div>
 </div>
 
+<!-- Modal: Ver Detalle del Curso -->
+<div class="modal fade" id="viewCourseModal" tabindex="-1" aria-labelledby="viewCourseLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header card-header-academic text-white">
+        <h5 class="modal-title" id="viewCourseLabel">Detalle del Curso</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div id="courseDetails">
+          <p class="text-muted text-center">Cargando información...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal para editar curso -->
+<div class="modal fade" id="editCourseModal" tabindex="-1" aria-labelledby="editCourseLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header card-header-academic text-white">
+        <h5 class="modal-title" id="editCourseLabel">Editar Curso</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form id="formEditarCurso" action="editar_curso.php" method="POST">
+        <div class="modal-body" id="editCourseBody">
+          <p class="text-muted text-center">Cargando información...</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-academic">Guardar Cambios</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<!-- Modal de confirmación para deshabilitar curso -->
+<div class="modal fade" id="confirmDisableModal" tabindex="-1" aria-labelledby="confirmDisableLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title" id="confirmDisableLabel">Deshabilitar Curso</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body text-center">
+        <p>¿Está seguro de que desea <strong>deshabilitar este curso</strong>?<br>
+        El curso pasará a estado <strong>Inactivo</strong> y no podrá ser asignado temporalmente.</p>
+      </div>
+      <div class="modal-footer justify-content-center">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" id="confirmDisableBtn" class="btn btn-danger">Deshabilitar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
 <script src="../js/jquery-3.3.1.min.js"></script>
 <script src="../js/bootstrap.bundle.min.js"></script>
+<script>
+    /* ========= Crear curso ========= */
+    document.getElementById('crearCursoForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const form = e.target;
+    const data = new FormData(form);
+    const btn = form.querySelector('button[type="submit"]');
+    btn.disabled = true; btn.textContent = "Guardando...";
+
+    try {
+        const res = await fetch(form.action, { method: 'POST', body: data });
+        const result = await res.json();
+        if (!result.success) throw new Error(result.message);
+        const modal = bootstrap.Modal.getInstance(document.getElementById('addCourseModal'));
+        modal.hide();
+
+        const box = document.createElement('div');
+        box.className = 'alert alert-info shadow position-fixed top-50 start-50 translate-middle text-center border border-primary';
+        box.style.zIndex = 2000;
+        box.style.minWidth = '420px';
+        box.style.padding = '20px';
+        box.innerHTML = `
+        <h5 class="mb-2">✅ Curso registrado correctamente</h5>
+        <p class="mb-1">Código generado: <strong>${result.codigo}</strong></p>
+        <div class="mt-3">
+            <button class="btn btn-primary btn-sm" onclick="this.closest('.alert').remove(); location.reload();">Cerrar</button>
+        </div>
+        `;
+        document.body.appendChild(box);
+    } catch (err) {
+        alert("Error: " + err.message);
+    } finally {
+        btn.disabled = false; btn.textContent = "Guardar Curso";
+    }
+    });
+
+    /* ========= Ver curso ========= */
+    document.querySelectorAll('.btn-view-course').forEach(btn => {
+    btn.addEventListener('click', async () => {
+        const id = btn.dataset.id;
+        const modal = new bootstrap.Modal(document.getElementById('viewCourseModal'));
+        const details = document.getElementById('courseDetails');
+        details.innerHTML = "<p class='text-muted text-center'>Cargando...</p>";
+        modal.show();
+
+        const res = await fetch(`ver_curso.php?id=${id}`);
+        const data = await res.json();
+
+        if (!data.success) {
+        details.innerHTML = `<p class='text-danger'>${data.message}</p>`;
+        return;
+        }
+
+        const c = data.curso;
+        details.innerHTML = `
+        <table class="table table-bordered">
+            <tr><th>Código</th><td>${c.codigo}</td></tr>
+            <tr><th>Nombre</th><td>${c.nombre}</td></tr>
+            <tr><th>Grado</th><td>${c.nombre_grado}</td></tr>
+            <tr><th>Profesor</th><td>${c.nombre_profesor}</td></tr>
+            <tr><th>Materia</th><td>${c.nombre_materia}</td></tr>
+            <tr><th>Capacidad</th><td>${c.capacidad}</td></tr>
+            <tr><th>Créditos</th><td>${c.creditos}</td></tr>
+            <tr><th>Fechas</th><td>${c.fecha_inicio || '-'} a ${c.fecha_fin || '-'}</td></tr>
+            <tr><th>Estado</th><td><span class="badge bg-${c.estatus === 'Activo' ? 'success' : (c.estatus === 'Pendiente' ? 'warning' : 'danger')}">${c.estatus}</span></td></tr>
+            <tr><th>Descripción</th><td>${c.descripcion || 'Sin descripción'}</td></tr>
+        </table>`;
+    });
+    });
+
+    /* ========= Editar curso ========= */
+    document.querySelectorAll('.btn-edit-course').forEach(btn => {
+    btn.addEventListener('click', async () => {
+        const id = btn.dataset.id;
+        const modalElement = document.getElementById('editCourseModal');
+        const body = document.getElementById('editCourseBody');
+        const modal = new bootstrap.Modal(modalElement);
+
+        body.innerHTML = "<p class='text-muted text-center'>Cargando...</p>";
+        modal.show();
+
+        try {
+        const res = await fetch(`ver_curso.php?id=${id}`);
+        const data = await res.json();
+
+        if (!data.success) {
+            body.innerHTML = `<p class='text-danger text-center'>${data.message}</p>`;
+            return;
+        }
+
+        const c = data.curso;
+
+        body.innerHTML = `
+            <input type="hidden" name="id" value="${c.id}">
+            <div class="row mb-3">
+            <div class="col-md-6">
+                <label>Nombre</label>
+                <input name="nombre" class="form-control" value="${c.nombre}" required>
+            </div>
+            <div class="col-md-3">
+                <label>Créditos</label>
+                <input name="creditos" type="number" class="form-control" value="${c.creditos}" required>
+            </div>
+            <div class="col-md-3">
+                <label>Capacidad</label>
+                <input name="capacidad" type="number" class="form-control" value="${c.capacidad}" required>
+            </div>
+            </div>
+            <div class="mb-3">
+            <label>Descripción</label>
+            <textarea name="descripcion" class="form-control" rows="3">${c.descripcion || ''}</textarea>
+            </div>
+            <div class="mb-3">
+            <label>Estado</label>
+            <select name="estatus" class="form-select">
+                <option value="Activo" ${c.estatus === 'Activo' ? 'selected' : ''}>Activo</option>
+                <option value="Pendiente" ${c.estatus === 'Pendiente' ? 'selected' : ''}>Pendiente</option>
+                <option value="Inactivo" ${c.estatus === 'Inactivo' ? 'selected' : ''}>Inactivo</option>
+            </select>
+            </div>
+        `;
+
+        // Registrar evento de submit dentro del modal (se garantiza que existe)
+        const form = document.getElementById('formEditarCurso');
+        form.onsubmit = async (e) => {
+            e.preventDefault();
+            const dataForm = new FormData(form);
+            try {
+            const resp = await fetch('editar_curso.php', { method: 'POST', body: dataForm });
+            const result = await resp.json();
+            if (result.success) {
+                const notif = document.createElement('div');
+                notif.className = 'alert alert-success shadow position-fixed top-0 start-50 translate-middle-x mt-3 text-center border border-success';
+                notif.style.zIndex = 2000;
+                notif.style.minWidth = '380px';
+                notif.innerHTML = `
+                    <strong>✅ Cambios guardados correctamente</strong>
+                    <br><small>El curso se actualizó sin problemas.</small>
+                `;
+                document.body.appendChild(notif);
+                setTimeout(() => {
+                    notif.classList.add('fade');
+                    setTimeout(() => notif.remove(), 500);
+                    location.reload();
+                }, 2500);
+                modal.hide();
+            } else {
+                const notif = document.createElement('div');
+                notif.className = 'alert alert-warning shadow position-fixed top-0 start-50 translate-middle-x mt-3 text-center border border-warning';
+                notif.style.zIndex = 2000;
+                notif.style.minWidth = '380px';
+                notif.innerHTML = `
+                    <strong>⚠️ No se pudieron guardar los cambios</strong>
+                    <br><small>${result.message}</small>
+                `;
+                document.body.appendChild(notif);
+                setTimeout(() => {
+                    notif.classList.add('fade');
+                    setTimeout(() => notif.remove(), 500);
+                }, 3500);
+            }
+
+            } catch (error) {
+            alert('❌ Error al guardar: ' + error.message);
+            }
+        };
+
+        } catch (error) {
+        console.error(error);
+        body.innerHTML = `<p class="text-danger text-center">Error al cargar los datos del curso.</p>`;
+        }
+    });
+    });
+
+    /* ========= Deshabilitar curso (versión elegante) ========= */
+    let cursoAEliminar = null; // variable global temporal
+
+    document.querySelectorAll('.btn-disable-course').forEach(btn => {
+    btn.addEventListener('click', () => {
+        cursoAEliminar = btn.dataset.id;
+        const modal = new bootstrap.Modal(document.getElementById('confirmDisableModal'));
+        modal.show();
+    });
+    });
+
+    document.getElementById('confirmDisableBtn').addEventListener('click', async () => {
+    if (!cursoAEliminar) return;
+
+    const formData = new FormData();
+    formData.append('id', cursoAEliminar);
+
+    try {
+        const res = await fetch('deshabilitar_curso.php', { method: 'POST', body: formData });
+        const data = await res.json();
+
+        // Ocultar el modal de confirmación
+        const modalEl = document.getElementById('confirmDisableModal');
+        const modal = bootstrap.Modal.getInstance(modalEl);
+        modal.hide();
+
+        // Crear notificación visual
+        const notif = document.createElement('div');
+        notif.className = `alert ${data.success ? 'alert-success' : 'alert-warning'} shadow position-fixed top-0 start-50 translate-middle-x mt-3 text-center border`;
+        notif.style.zIndex = 2000;
+        notif.style.minWidth = '380px';
+        notif.innerHTML = `
+        <strong>${data.success ? '✅ Curso deshabilitado correctamente' : '⚠️ No se pudo deshabilitar el curso'}</strong>
+        <br><small>${data.message}</small>
+        `;
+        document.body.appendChild(notif);
+
+        setTimeout(() => {
+        notif.classList.add('fade');
+        setTimeout(() => notif.remove(), 500);
+        if (data.success) location.reload();
+        }, 2500);
+
+    } catch (err) {
+        console.error(err);
+        alert('Error inesperado al deshabilitar el curso.');
+    }
+    });
+
+</script>
+
+
 </body>
 </html>
