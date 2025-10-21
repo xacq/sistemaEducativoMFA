@@ -332,7 +332,7 @@ include __DIR__ . '/side_bar_director.php';
                     <h5 class="modal-title" id="addStudentModalLabel">Agregar Nuevo Estudiante</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <form action="guardar_estudiante.php" method="POST" enctype="multipart/form-data">
+                <form id="formNuevoEstudiante" action="crear_estudiante.php" method="POST" enctype="multipart/form-data">
                     <div class="modal-body">
                         <!-- Nombres y Apellidos -->
                         <div class="row mb-3">
@@ -394,5 +394,67 @@ include __DIR__ . '/side_bar_director.php';
     <!-- Scripts -->
     <script src=".. /js/jquery-3.3.1.min.js"></script>
     <script src="../js/bootstrap.bundle.min.js"></script>
+    <script>
+    // --- Envío AJAX del formulario "Nuevo Estudiante" ---
+    document.getElementById('formNuevoEstudiante').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const form = e.target;
+        const data = new FormData(form);
+
+        // Deshabilitar botón mientras se guarda
+        const submitBtn = form.querySelector('button[type="submit"]');
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Guardando...";
+
+        try {
+            const response = await fetch(form.action, { method: 'POST', body: data });
+            const result = await response.json();
+
+            if (!result.success) {
+                alert(result.message || "Error al registrar estudiante.");
+                submitBtn.disabled = false;
+                submitBtn.textContent = "Guardar Estudiante";
+                return;
+            }
+
+            // Cerrar modal (usa Bootstrap 5)
+            const modal = bootstrap.Modal.getInstance(document.getElementById('addStudentModal'));
+            modal.hide();
+
+            // Crear mensaje flotante centrado
+            const box = document.createElement('div');
+            box.className = 'alert alert-info shadow position-fixed top-50 start-50 translate-middle text-center border border-primary';
+            box.style.zIndex = 2000;
+            box.style.minWidth = '420px';
+            box.style.padding = '20px';
+            box.innerHTML = `
+                <h5 class="mb-2">✅ Estudiante registrado correctamente</h5>
+                <p class="mb-1">Enlace de activación (entregar al estudiante):</p>
+                <a href="${result.activation_link}" target="_blank">${result.activation_link}</a>
+                <div class="mt-3">
+                    <button class="btn btn-primary btn-sm" onclick="this.closest('.alert').remove(); location.reload();">Cerrar</button>
+                </div>
+            `;
+            document.body.appendChild(box);
+        } catch (error) {
+            console.error(error);
+            alert("Ocurrió un error inesperado al guardar el estudiante.");
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = "Guardar Estudiante";
+        }
+    });
+    </script>
+
+    <style>
+    .alert.position-fixed {
+        animation: aparecer 0.3s ease-out;
+    }
+    @keyframes aparecer {
+        from { opacity: 0; transform: translate(-50%, -40%); }
+        to { opacity: 1; transform: translate(-50%, -50%); }
+    }
+    </style>
+
 </body>
 </html>
