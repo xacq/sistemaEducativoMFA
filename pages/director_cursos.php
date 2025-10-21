@@ -230,7 +230,7 @@ include __DIR__ . '/side_bar_director.php';
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <!-- El action apunta al script que guarda los datos. -->
-            <form action="crear_curso.php" method="POST">
+            <form id="crearCursoForm" action="crear_curso.php" method="POST">
                 <div class="modal-body">
                     <!-- Fila: Código y Nombre -->
                     <div class="row mb-3">
