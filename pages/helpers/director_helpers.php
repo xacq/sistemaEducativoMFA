@@ -123,6 +123,8 @@ function director_validate_horario(mysqli $mysqli, int $cursoId, string $dia, st
     if ($horaFin <= $horaInicio) {
         $errores[] = 'La hora de fin debe ser mayor a la hora de inicio.';
     }
+
+    // Verificar si existe el curso y obtener el profesor
     $stmtCurso = $mysqli->prepare('SELECT profesor_id FROM cursos WHERE id = ?');
     if (!$stmtCurso) {
         $errores[] = 'No se pudo validar el curso seleccionado.';
@@ -138,9 +140,13 @@ function director_validate_horario(mysqli $mysqli, int $cursoId, string $dia, st
     }
     $stmtCurso->close();
 
-    $excludeSql = $excludeId ? ' AND id <> ?' : '';
+    // Excluir el mismo horario si estamos editando
+    $excludeSql = $excludeId ? ' AND h.id <> ?' : '';
 
-    $sqlCurso = "SELECT COUNT(*) FROM horarios WHERE curso_id = ? AND dia = ?{$excludeSql} AND NOT (? >= hora_fin OR ? <= hora_inicio)";
+    // 1️⃣ Validar choques dentro del mismo curso
+    $sqlCurso = "SELECT COUNT(*) FROM horarios h
+                 WHERE h.curso_id = ? AND h.dia = ?{$excludeSql}
+                 AND NOT (? >= h.hora_fin OR ? <= h.hora_inicio)";
     $stmt = $mysqli->prepare($sqlCurso);
     if ($excludeId) {
         $stmt->bind_param('isssi', $cursoId, $dia, $horaInicio, $horaFin, $excludeId);
@@ -155,6 +161,7 @@ function director_validate_horario(mysqli $mysqli, int $cursoId, string $dia, st
         $errores[] = 'El curso ya tiene un horario solapado en ese día.';
     }
 
+    // 2️⃣ Validar choques con el mismo profesor
     $sqlProfesor = "SELECT COUNT(*) FROM horarios h
                     JOIN cursos c ON h.curso_id = c.id
                     WHERE c.profesor_id = ? AND h.dia = ?{$excludeSql}
@@ -173,7 +180,10 @@ function director_validate_horario(mysqli $mysqli, int $cursoId, string $dia, st
         $errores[] = 'El profesor asignado tiene otro curso en ese horario.';
     }
 
-    $sqlAula = "SELECT COUNT(*) FROM horarios WHERE aula = ? AND dia = ?{$excludeSql} AND NOT (? >= hora_fin OR ? <= hora_inicio)";
+    // 3️⃣ Validar choques con la misma aula
+    $sqlAula = "SELECT COUNT(*) FROM horarios h
+                WHERE h.aula = ? AND h.dia = ?{$excludeSql}
+                AND NOT (? >= h.hora_fin OR ? <= h.hora_inicio)";
     $stmt = $mysqli->prepare($sqlAula);
     if ($excludeId) {
         $stmt->bind_param('isssi', $aula, $dia, $horaInicio, $horaFin, $excludeId);
@@ -190,6 +200,7 @@ function director_validate_horario(mysqli $mysqli, int $cursoId, string $dia, st
 
     return $errores;
 }
+
 
 function director_check_prerequisitos(mysqli $mysqli, int $estudianteId, int $cursoId): ?string
 {

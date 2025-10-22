@@ -59,3 +59,10 @@ video {
     min-height: 120%;
     z-index: -1;
 }
+.alert.position-fixed {
+  transition: opacity 0.5s ease, transform 0.3s ease;
+}
+.alert.fade {
+  opacity: 0;
+  transform: translate(-50%, -20px);
+}

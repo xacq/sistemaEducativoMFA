@@ -124,8 +124,9 @@ $cursos = director_get_courses($mysqli, $gradeFilter ?: null);
 $todosLosCursos = director_get_courses($mysqli, null);
 
 $params = [];
-$sql = "SELECT h.id, h.dia, h.hora_inicio, h.hora_fin, h.aula, c.id AS curso_id, c.nombre AS curso_nombre, c.codigo, g.nombre AS grado_nombre,
-               CONCAT(u.nombre, ' ', u.apellido) AS profesor
+$sql = "SELECT h.id, h.dia, h.hora_inicio, h.hora_fin, h.aula, h.estatus, 
+               c.id AS curso_id, c.nombre AS curso_nombre, c.codigo, 
+               g.nombre AS grado_nombre, CONCAT(u.nombre, ' ', u.apellido) AS profesor
         FROM horarios h
         JOIN cursos c ON h.curso_id = c.id
         JOIN grados g ON c.grado_id = g.id
@@ -331,6 +332,7 @@ include __DIR__ . '/side_bar_director.php';
                                 <th>Inicio</th>
                                 <th>Fin</th>
                                 <th>Aula</th>
+                                <th>Estatus</th>
                                 <th class="text-end">Acciones</th>
                             </tr>
                             </thead>
@@ -349,20 +351,19 @@ include __DIR__ . '/side_bar_director.php';
                                     <td><?php echo htmlspecialchars(substr($horario['hora_inicio'], 0, 5), ENT_QUOTES, 'UTF-8'); ?></td>
                                     <td><?php echo htmlspecialchars(substr($horario['hora_fin'], 0, 5), ENT_QUOTES, 'UTF-8'); ?></td>
                                     <td><?php echo htmlspecialchars($horario['aula'], ENT_QUOTES, 'UTF-8'); ?></td>
+                                    <td>
+                                        <?php if ($horario['estatus'] === 'Activo'): ?>
+                                            <span class="badge bg-success">Activo</span>
+                                        <?php else: ?>
+                                            <span class="badge bg-secondary">Inactivo</span>
+                                        <?php endif; ?>
                                     <td class="text-end">
                                         <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#editar-<?php echo (int)$horario['id']; ?>" aria-expanded="false">
                                             <i class="bi bi-pencil"></i>
                                         </button>
-                                        <form method="post" class="d-inline" onsubmit="return confirm('¿Desea eliminar este horario?');">
-                                            <input type="hidden" name="action" value="delete">
-                                            <input type="hidden" name="id" value="<?php echo (int)$horario['id']; ?>">
-                                            <input type="hidden" name="grade_filter" value="<?php echo $gradeFilter; ?>">
-                                            <input type="hidden" name="course_filter" value="<?php echo $courseFilter; ?>">
-                                            <input type="hidden" name="day_filter" value="<?php echo htmlspecialchars($dayFilter, ENT_QUOTES, 'UTF-8'); ?>">
-                                            <button type="submit" class="btn btn-sm btn-outline-danger ms-1">
-                                                <i class="bi bi-trash"></i>
-                                            </button>
-                                        </form>
+                                        <button class="btn btn-sm btn-outline-danger btn-disable-horario" data-id="<?php echo (int)$horario['id']; ?>" title="Deshabilitar">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
                                     </td>
                                 </tr>
                                 <tr class="collapse" id="editar-<?php echo (int)$horario['id']; ?>">
@@ -418,6 +419,76 @@ include __DIR__ . '/side_bar_director.php';
         </div>
     </div>
 </div>
+<!-- Modal de confirmación para deshabilitar horario -->
+<div class="modal fade" id="confirmDisableHorarioModal" tabindex="-1" aria-labelledby="confirmDisableHorarioLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title" id="confirmDisableHorarioLabel">Deshabilitar horario</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body text-center">
+        <p>¿Está seguro de que desea <strong>deshabilitar este horario</strong>?<br>
+        Se marcará como <strong>Inactivo</strong> y dejará de mostrarse en la planificación.</p>
+      </div>
+      <div class="modal-footer justify-content-center">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" id="confirmDisableHorarioBtn" class="btn btn-danger">Deshabilitar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+        /* ========= Deshabilitar horario (versión elegante) ========= */
+    let horarioAEliminar = null;
+
+    document.querySelectorAll('.btn-disable-horario').forEach(btn => {
+    btn.addEventListener('click', () => {
+        horarioAEliminar = btn.dataset.id;
+        const modal = new bootstrap.Modal(document.getElementById('confirmDisableHorarioModal'));
+        modal.show();
+    });
+    });
+
+    document.getElementById('confirmDisableHorarioBtn').addEventListener('click', async () => {
+    if (!horarioAEliminar) return;
+
+    const formData = new FormData();
+    formData.append('id', horarioAEliminar);
+
+    try {
+        const res = await fetch('deshabilitar_horario.php', { method: 'POST', body: formData });
+        const data = await res.json();
+
+        const modalEl = document.getElementById('confirmDisableHorarioModal');
+        const modal = bootstrap.Modal.getInstance(modalEl);
+        modal.hide();
+
+        // Notificación visual
+        const notif = document.createElement('div');
+        notif.className = `alert ${data.success ? 'alert-success' : 'alert-warning'} shadow position-fixed top-0 start-50 translate-middle-x mt-3 text-center border`;
+        notif.style.zIndex = 2000;
+        notif.style.minWidth = '380px';
+        notif.innerHTML = `
+        <strong>${data.success ? '✅ Horario deshabilitado' : '⚠️ No se pudo deshabilitar'}</strong><br>
+        <small>${data.message}</small>
+        `;
+        document.body.appendChild(notif);
+
+        setTimeout(() => {
+        notif.classList.add('fade');
+        setTimeout(() => notif.remove(), 500);
+        if (data.success) location.reload();
+        }, 2500);
+
+    } catch (err) {
+        console.error(err);
+        alert('Error inesperado al deshabilitar el horario.');
+    }
+    });
+
+</script>
 </body>
 </html>
