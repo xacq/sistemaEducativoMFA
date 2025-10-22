@@ -116,27 +116,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         redirect_with_filters($filters);
     }
-
-    if ($action === 'remove') {
-        $matriculaId = isset($_POST['matricula_id']) ? (int)$_POST['matricula_id'] : 0;
-        if ($matriculaId <= 0) {
-            flash_push('error', 'La matrícula seleccionada no es válida.');
-        } else {
-            $stmt = $mysqli->prepare('DELETE FROM matriculas WHERE id = ?');
-            if ($stmt) {
-                $stmt->bind_param('i', $matriculaId);
-                if ($stmt->execute()) {
-                    flash_push('success', 'La matrícula se eliminó correctamente.');
-                } else {
-                    flash_push('error', 'No se pudo eliminar la matrícula.');
-                }
-                $stmt->close();
-            } else {
-                flash_push('error', 'No se pudo preparar la eliminación.');
-            }
-        }
-        redirect_with_filters($filters);
-    }
 }
 
 $identity = director_get_identity($mysqli, (int)$_SESSION['user_id']);
@@ -144,7 +123,7 @@ $grados = director_get_grades($mysqli);
 $cursos = director_get_courses($mysqli, $gradeFilter ?: null);
 $estudiantes = director_get_students($mysqli, $gradeFilter ?: null);
 
-$sql = "SELECT m.id, m.fecha_matricula, e.codigo_estudiante, CONCAT(u.nombre, ' ', u.apellido) AS estudiante,
+$sql = "SELECT m.id, m.fecha_matricula, m.estatus, e.codigo_estudiante, CONCAT(u.nombre, ' ', u.apellido) AS estudiante,
                g.nombre AS grado, c.nombre AS curso, c.codigo AS codigo_curso, c.capacidad,
                (SELECT COUNT(*) FROM matriculas mi WHERE mi.curso_id = c.id) AS inscritos
         FROM matriculas m
@@ -276,48 +255,40 @@ include __DIR__ . '/side_bar_director.php';
                 </div>
                 <div class="card-body">
                     <form method="post" class="row g-3">
-                        <input type="hidden" name="action" value="assign">
-                        <input type="hidden" name="grade_filter" value="<?php echo $gradeFilter; ?>">
-                        <input type="hidden" name="course_filter" value="<?php echo $courseFilter; ?>">
-                        <input type="hidden" name="search_filter" value="<?php echo htmlspecialchars($searchFilter, ENT_QUOTES, 'UTF-8'); ?>">
-                        <div class="col-md-3">
-                            <label class="form-label" for="gradoAsignacion">Grado</label>
-                            <select class="form-select" id="gradoAsignacion" name="grado_id">
-                                <option value="">Seleccione...</option>
-                                <?php foreach ($grados as $grado): ?>
-                                    <option value="<?php echo (int)$grado['id']; ?>" <?php echo $gradeFilter === (int)$grado['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($grado['nombre'], ENT_QUOTES, 'UTF-8'); ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label" for="estudianteSelect">Estudiante</label>
-                            <select class="form-select" id="estudianteSelect" name="estudiante_id" required>
-                                <option value="">Seleccione...</option>
-                                <?php foreach ($estudiantes as $estudiante): ?>
-                                    <option value="<?php echo (int)$estudiante['id']; ?>">
-                                        <?php echo htmlspecialchars($estudiante['nombre_completo'] . ' - ' . $estudiante['codigo_estudiante'], ENT_QUOTES, 'UTF-8'); ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label" for="cursoSelect">Curso</label>
-                            <select class="form-select" id="cursoSelect" name="curso_id" required>
-                                <option value="">Seleccione...</option>
-                                <?php foreach ($cursos as $curso): ?>
-                                    <option value="<?php echo (int)$curso['id']; ?>">
-                                        <?php echo htmlspecialchars($curso['nombre'] . ' (' . $curso['codigo'] . ')', ENT_QUOTES, 'UTF-8'); ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                        <div class="col-md-2 d-flex align-items-end">
-                            <button type="submit" class="btn btn-success w-100"><i class="bi bi-check-circle me-1"></i>Asignar</button>
-                        </div>
+                    <input type="hidden" name="action" value="assign">
+                    <input type="hidden" name="grade_filter" value="<?php echo $gradeFilter; ?>">
+                    <input type="hidden" name="course_filter" value="<?php echo $courseFilter; ?>">
+                    <input type="hidden" name="search_filter" value="<?php echo htmlspecialchars($searchFilter, ENT_QUOTES, 'UTF-8'); ?>">
+
+                    <div class="col-md-5 position-relative">
+                        <label class="form-label" for="buscarEstudiante">Buscar estudiante</label>
+                        <input type="text" class="form-control" id="buscarEstudiante" placeholder="Escriba nombre o apellido..." autocomplete="off">
+                        <div id="sugerenciasEstudiantes" class="list-group position-absolute w-100 shadow-sm" style="z-index: 1050; max-height: 260px; overflow:auto;"></div>
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label" for="gradoAsignacion">Grado</label>
+                        <input type="text" class="form-control" id="gradoAsignacion" readonly>
+                        <input type="hidden" name="grado_id" id="gradoId">
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label" for="cursoSelect">Curso</label>
+                        <select class="form-select" id="cursoSelect" name="curso_id" required>
+                        <option value="">Seleccione...</option>
+                        </select>
+                    </div>
+
+                    <input type="hidden" name="estudiante_id" id="estudianteId">
+
+                    <div class="col-md-1 d-flex align-items-end">
+                        <button type="submit" class="btn btn-success w-100"><i class="bi bi-check-circle me-1"></i></button>
+                    </div>
                     </form>
-                    <p class="text-muted small mt-2">Las opciones se limitan al grado seleccionado para evitar errores de asignación.</p>
+                    <p class="text-muted small mt-2">Seleccione un estudiante para cargar su grado y los cursos disponibles.</p>
                 </div>
             </div>
+
 
             <div class="card">
                 <div class="card-header card-header-academic text-white">
@@ -334,6 +305,7 @@ include __DIR__ . '/side_bar_director.php';
                                 <th>Grado</th>
                                 <th>Cupo</th>
                                 <th>Fecha</th>
+                                <th>Estatus</th>
                                 <th class="text-end">Acciones</th>
                             </tr>
                             </thead>
@@ -351,15 +323,18 @@ include __DIR__ . '/side_bar_director.php';
                                     <td><?php echo htmlspecialchars($matricula['grado'], ENT_QUOTES, 'UTF-8'); ?></td>
                                     <td><?php echo (int)$matricula['inscritos'] . '/' . (int)$matricula['capacidad']; ?></td>
                                     <td><?php echo htmlspecialchars($matricula['fecha_matricula'], ENT_QUOTES, 'UTF-8'); ?></td>
+                                    <td>
+                                        <?php if ($matricula['estatus'] === 'Activa'): ?>
+                                            <span class="badge bg-success">Activa</span>
+                                        <?php else: ?>
+                                            <span class="badge bg-secondary">Inactiva</span>
+                                        <?php endif; ?>
                                     <td class="text-end">
-                                        <form method="post" class="d-inline" onsubmit="return confirm('¿Desea eliminar esta matrícula?');">
-                                            <input type="hidden" name="action" value="remove">
-                                            <input type="hidden" name="matricula_id" value="<?php echo (int)$matricula['id']; ?>">
-                                            <input type="hidden" name="grade_filter" value="<?php echo $gradeFilter; ?>">
-                                            <input type="hidden" name="course_filter" value="<?php echo $courseFilter; ?>">
-                                            <input type="hidden" name="search_filter" value="<?php echo htmlspecialchars($searchFilter, ENT_QUOTES, 'UTF-8'); ?>">
-                                            <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
-                                        </form>
+                                        <button class="btn btn-sm btn-outline-danger btn-disable-matricula" 
+                                                data-id="<?php echo (int)$matricula['id']; ?>" 
+                                                title="Deshabilitar matrícula">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
@@ -371,6 +346,178 @@ include __DIR__ . '/side_bar_director.php';
         </div>
     </div>
 </div>
+<!-- Modal de confirmación para deshabilitar matrícula -->
+<div class="modal fade" id="confirmDisableMatriculaModal" tabindex="-1" aria-labelledby="confirmDisableMatriculaLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title" id="confirmDisableMatriculaLabel">Deshabilitar matrícula</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body text-center">
+        <p>¿Está seguro de que desea <strong>deshabilitar esta matrícula</strong>?<br>
+        El registro permanecerá en el sistema, pero no se considerará activo.</p>
+      </div>
+      <div class="modal-footer justify-content-center">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" id="confirmDisableMatriculaBtn" class="btn btn-danger">Deshabilitar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    // --- Búsqueda dinámica de estudiantes ---
+    const inputBuscar = document.getElementById('buscarEstudiante');
+    const listaSugerencias = document.getElementById('sugerenciasEstudiantes');
+    const inputGrado = document.getElementById('gradoAsignacion');
+    const inputGradoId = document.getElementById('gradoId');
+    const inputEstudianteId = document.getElementById('estudianteId');
+    const selectCurso = document.getElementById('cursoSelect');
+
+    let abortCtrl = null;
+
+    // --- Buscar estudiantes dinámicamente ---
+    inputBuscar.addEventListener('input', async () => {
+    const q = inputBuscar.value.trim();
+    listaSugerencias.innerHTML = '';
+    if (q.length < 2) return;
+
+    // Cancela solicitud previa si el usuario sigue tecleando
+    if (abortCtrl) abortCtrl.abort();
+    abortCtrl = new AbortController();
+
+    listaSugerencias.innerHTML = '<div class="list-group-item text-muted">Cargando...</div>';
+
+    try {
+        const res = await fetch(`buscar_estudiantes.php?q=${encodeURIComponent(q)}`, { signal: abortCtrl.signal });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+
+        if (!Array.isArray(data) || data.length === 0) {
+        listaSugerencias.innerHTML = '<div class="list-group-item text-muted">Sin resultados</div>';
+        return;
+        }
+
+        listaSugerencias.innerHTML = '';
+        data.forEach(est => {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'list-group-item list-group-item-action';
+        item.textContent = `${est.nombre_completo} (${est.codigo_estudiante}) - ${est.grado_nombre}`;
+        item.dataset.id = est.estudiante_id;
+        item.dataset.grado = est.grado_id;
+        item.dataset.gradonombre = est.grado_nombre;
+        listaSugerencias.appendChild(item);
+        });
+    } catch (err) {
+        if (err.name !== 'AbortError') {
+        console.error('Error buscando estudiantes:', err);
+        listaSugerencias.innerHTML = '<div class="list-group-item text-danger">Error al buscar</div>';
+        }
+    }
+    });
+
+    // Cierra sugerencias si se hace clic fuera
+    document.addEventListener('click', (e) => {
+    if (!e.target.closest('#buscarEstudiante') && !e.target.closest('#sugerenciasEstudiantes')) {
+        listaSugerencias.innerHTML = '';
+    }
+    });
+
+    // --- Al seleccionar un estudiante ---
+    listaSugerencias.addEventListener('click', async e => {
+    const btn = e.target.closest('.list-group-item');
+    if (!btn || !btn.dataset.id) return;
+
+    const id = btn.dataset.id;
+    const gradoId = btn.dataset.grado;
+    const gradoNombre = btn.dataset.gradonombre;
+
+    inputBuscar.value = btn.textContent.split('(')[0].trim();
+    listaSugerencias.innerHTML = '';
+
+    inputGrado.value = gradoNombre;
+    inputGradoId.value = gradoId;
+    inputEstudianteId.value = id;
+
+    // Cargar cursos del grado
+    selectCurso.innerHTML = '<option value="">Cargando cursos...</option>';
+    try {
+        const res = await fetch(`obtener_cursos_por_grado.php?grado_id=${encodeURIComponent(gradoId)}`);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const cursos = await res.json();
+
+        selectCurso.innerHTML = '<option value="">Seleccione...</option>';
+        if (Array.isArray(cursos) && cursos.length) {
+        cursos.forEach(curso => {
+            const opt = document.createElement('option');
+            opt.value = curso.id;
+            opt.textContent = `${curso.nombre} (${curso.codigo})`;
+            selectCurso.appendChild(opt);
+        });
+        } else {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = 'No hay cursos activos en este grado';
+        selectCurso.appendChild(opt);
+        }
+    } catch (err) {
+        console.error('Error cargando cursos por grado:', err);
+        selectCurso.innerHTML = '<option value="">Error al cargar cursos</option>';
+    }
+    });
+
+
+        /* ========= Deshabilitar matrícula ========= */
+    let matriculaAEliminar = null;
+
+    document.querySelectorAll('.btn-disable-matricula').forEach(btn => {
+    btn.addEventListener('click', () => {
+        matriculaAEliminar = btn.dataset.id;
+        const modal = new bootstrap.Modal(document.getElementById('confirmDisableMatriculaModal'));
+        modal.show();
+    });
+    });
+
+    document.getElementById('confirmDisableMatriculaBtn').addEventListener('click', async () => {
+    if (!matriculaAEliminar) return;
+
+    const formData = new FormData();
+    formData.append('id', matriculaAEliminar);
+
+    try {
+        const res = await fetch('deshabilitar_matricula.php', { method: 'POST', body: formData });
+        const data = await res.json();
+
+        const modalEl = document.getElementById('confirmDisableMatriculaModal');
+        const modal = bootstrap.Modal.getInstance(modalEl);
+        modal.hide();
+
+        const notif = document.createElement('div');
+        notif.className = `alert ${data.success ? 'alert-success' : 'alert-warning'} shadow position-fixed top-0 start-50 translate-middle-x mt-3 text-center border`;
+        notif.style.zIndex = 2000;
+        notif.style.minWidth = '380px';
+        notif.innerHTML = `
+        <strong>${data.success ? '✅ Matrícula deshabilitada' : '⚠️ No se pudo deshabilitar'}</strong><br>
+        <small>${data.message}</small>
+        `;
+        document.body.appendChild(notif);
+
+        setTimeout(() => {
+        notif.classList.add('fade');
+        setTimeout(() => notif.remove(), 500);
+        if (data.success) location.reload();
+        }, 2500);
+
+    } catch (err) {
+        console.error(err);
+        alert('Error inesperado al deshabilitar la matrícula.');
+    }
+    });
+
+</script>
+
 </body>
 </html>
