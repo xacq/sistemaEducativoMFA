@@ -223,7 +223,14 @@ include __DIR__ . '/side_bar_director.php';
                                         <td><?php echo $resumen['bueno_count']; ?> <small class="text-muted">(<?php echo ($resumen['total_estudiantes'] > 0) ? round($resumen['bueno_count'] / $resumen['total_estudiantes'] * 100) : 0; ?>%)</small></td>
                                         <td><?php echo $resumen['regular_count']; ?> <small class="text-muted">(<?php echo ($resumen['total_estudiantes'] > 0) ? round($resumen['regular_count'] / $resumen['total_estudiantes'] * 100) : 0; ?>%)</small></td>
                                         <td><?php echo $resumen['insuficiente_count']; ?> <small class="text-muted">(<?php echo ($resumen['total_estudiantes'] > 0) ? round($resumen['insuficiente_count'] / $resumen['total_estudiantes'] * 100) : 0; ?>%)</small></td>
-                                        <td><button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#courseDetailModal"><i class="bi bi-eye"></i></button></td>
+                                        <td>
+                                            <button 
+                                                class="btn btn-sm btn-outline-primary btn-ver-calificaciones" 
+                                                data-id="<?php echo $resumen['curso_id']; ?>"
+                                                title="Ver calificaciones del curso">
+                                                <i class="bi bi-eye"></i>
+                                            </button>
+                                        </td>
                                     </tr>
                                     <?php endforeach; ?>
                                 <?php endif; ?>
@@ -235,8 +242,76 @@ include __DIR__ . '/side_bar_director.php';
         </div>
     </div>
     <!-- Modals -->
-    <!-- ... (Tus modals #courseDetailModal y #exportModal van aquí) ... -->
+     <!-- Modal: Detalle de calificaciones -->
+    <div class="modal fade" id="detalleCalificacionesModal" tabindex="-1" aria-labelledby="detalleCalificacionesLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="detalleCalificacionesLabel">Calificaciones del curso</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body" id="detalleCalificacionesBody">
+                <p class="text-muted text-center">Cargando calificaciones...</p>
+            </div>
+            </div>
+        </div>
+    </div>
+
     <script src="../js/jquery-3.3.1.min.js"></script>
     <script src="../js/bootstrap.bundle.min.js"></script>
+    <script>
+    document.querySelectorAll('.btn-ver-calificaciones').forEach(btn => {
+    btn.addEventListener('click', async () => {
+        const id = btn.dataset.id;
+        const modalEl = document.getElementById('detalleCalificacionesModal');
+        const modal = new bootstrap.Modal(modalEl);
+        const body = document.getElementById('detalleCalificacionesBody');
+        body.innerHTML = "<p class='text-muted text-center'>Cargando calificaciones...</p>";
+        modal.show();
+
+        try {
+        const res = await fetch(`ver_calificaciones.php?curso_id=${id}`);
+        const data = await res.json();
+
+        if (!data.success) {
+            body.innerHTML = `<p class="text-danger text-center">${data.message}</p>`;
+            return;
+        }
+
+        let html = `
+            <div class="table-responsive">
+            <table class="table table-sm table-bordered align-middle">
+            <thead class="table-academic">
+            <tr>
+                <th>Estudiante</th>
+                <th>Evaluación</th>
+                <th>Calificación</th>
+                <th>Fecha</th>
+                <th>Comentario</th>
+            </tr>
+            </thead>
+            <tbody>`;
+        
+        data.calificaciones.forEach(c => {
+            html += `
+            <tr>
+                <td>${c.estudiante}</td>
+                <td>${c.evaluacion}</td>
+                <td><strong>${parseFloat(c.calificacion).toFixed(2)}</strong></td>
+                <td>${c.fecha}</td>
+                <td>${c.comentario || ''}</td>
+            </tr>`;
+        });
+
+        html += '</tbody></table></div>';
+        body.innerHTML = html;
+        } catch (err) {
+        console.error(err);
+        body.innerHTML = `<p class="text-danger text-center">Error al cargar las calificaciones.</p>`;
+        }
+    });
+    });
+    </script>
+
 </body>
 </html>
