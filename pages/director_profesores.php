@@ -64,7 +64,8 @@ $stmt_total->close();
 $profesores = [];
 $sql_profesores = "
     SELECT 
-        p.id AS profesor_id, p.codigo_empleado, p.departamento, p.fecha_inicio, p.foto_perfil,
+        p.id AS profesor_id, p.codigo_empleado, p.departamento, p.fecha_inicio, 
+        p.foto_perfil, p.estatus,
         u.nombre, u.apellido, u.email
     FROM profesores p
     JOIN usuarios u ON p.usuario_id = u.id
@@ -72,6 +73,7 @@ $sql_profesores = "
     ORDER BY u.apellido, u.nombre
     LIMIT ? OFFSET ?
 ";
+
 $stmt_profesores = $mysqli->prepare($sql_profesores);
 $params_paginacion = $params;
 $params_paginacion[] = $registros_por_pagina;
@@ -199,7 +201,8 @@ include __DIR__ . '/side_bar_director.php';
                                         <th>Departamento</th>
                                         <th>Materias</th>
                                         <th>Años de Servicio</th>
-                                        <th>Acciones</th>
+                                        <th>Estado</th>
+                                        <th>Acciones</th>                                        
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -208,22 +211,17 @@ include __DIR__ . '/side_bar_director.php';
                                     <?php else: ?>
                                         <?php foreach ($profesores as $profesor): ?>
                                         <tr>
-                                            <td>
+                                            <td data-id="<?php echo $profesor['profesor_id']; ?>">
                                                 <div class="d-flex align-items-center">
                                                     <?php 
-                                                    $foto_path = 'https://via.placeholder.com/40'; // Foto por defecto
+                                                    $foto_path = 'https://via.placeholder.com/40';
                                                     if (!empty($profesor['foto_perfil'])) {
-                                                        // Si el campo contiene 'http', es una URL. Si no, es una ruta local.
-                                                        if (strpos($profesor['foto_perfil'], 'http') === 0) {
-                                                            $foto_path = $profesor['foto_perfil'];
-                                                        } else {
-                                                            // Asume que las fotos locales se guardan en una carpeta como 'uploads/profiles/'
-                                                            // y que la ruta en la BD es relativa a esa carpeta. Ajusta según tu estructura.
-                                                            $foto_path = '../uploads/profiles/' . $profesor['foto_perfil'];
-                                                        }
+                                                        $foto_path = (strpos($profesor['foto_perfil'], 'http') === 0)
+                                                            ? $profesor['foto_perfil']
+                                                            : '../uploads/profiles/' . $profesor['foto_perfil'];
                                                     }
                                                     ?>
-                                                    <img src="<?php echo htmlspecialchars($foto_path); ?>" class="rounded-circle me-3" alt="Foto" style="width: 40px; height: 40px; object-fit: cover;">
+                                                    <img src="<?php echo htmlspecialchars($foto_path); ?>" class="rounded-circle me-3" style="width: 40px; height: 40px; object-fit: cover;">
                                                     <div>
                                                         <h6 class="mb-0"><?php echo htmlspecialchars($profesor['nombre'] . ' ' . $profesor['apellido']); ?></h6>
                                                         <small class="text-muted"><?php echo htmlspecialchars($profesor['email']); ?></small>
@@ -240,9 +238,16 @@ include __DIR__ . '/side_bar_director.php';
                                                 ?>
                                             </td>
                                             <td>
+                                                <?php if ($profesor['estatus'] === 'Activo'): ?>
+                                                    <span class="badge bg-success">Activo</span>
+                                                <?php else: ?>
+                                                    <span class="badge bg-secondary">Inactivo</span>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td>
                                                 <button class="btn btn-sm btn-outline-primary" title="Ver Perfil"><i class="bi bi-eye"></i></button>
                                                 <button class="btn btn-sm btn-outline-secondary" title="Editar"><i class="bi bi-pencil"></i></button>
-                                                <button class="btn btn-sm btn-outline-danger" title="Eliminar"><i class="bi bi-trash"></i></button>
+                                                <button class="btn btn-sm btn-outline-danger" title="Deshabilitar"><i class="bi bi-trash"></i></button>
                                             </td>
                                         </tr>
                                         <?php endforeach; ?>
@@ -383,17 +388,200 @@ include __DIR__ . '/side_bar_director.php';
             submitBtn.textContent = "Guardar Profesor";
         }
     });
+    /* ====== VER PROFESOR ====== */
+    document.querySelectorAll('.btn-outline-primary').forEach(btn => {
+    btn.addEventListener('click', async () => {
+        const id = btn.closest('tr').querySelector('td').dataset.id || btn.dataset.id;
+        const res = await fetch(`ver_profesor.php?id=${id}`);
+        const data = await res.json();
+
+        if (data.error) return alert(data.error);
+
+        const modal = document.createElement('div');
+        modal.className = 'modal fade';
+        modal.innerHTML = `
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">Perfil del Profesor</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                <div class="col-md-4 text-center">
+                    <img src="${data.foto_perfil ? '../uploads/profiles/'+data.foto_perfil : 'https://via.placeholder.com/150'}" class="rounded-circle img-thumbnail mb-3" width="120">
+                    <h5>${data.nombre} ${data.apellido}</h5>
+                    <p class="text-muted">${data.email}</p>
+                </div>
+                <div class="col-md-8">
+                    <p><strong>Departamento:</strong> ${data.departamento}</p>
+                    <p><strong>Cargo:</strong> ${data.cargo}</p>
+                    <p><strong>Dirección:</strong> ${data.direccion}</p>
+                    <p><strong>Teléfono:</strong> ${data.telefono || '—'}</p>
+                    <p><strong>Formación Académica:</strong><br>${data.formacion_academica}</p>
+                </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+            </div>
+        </div>
+        `;
+        document.body.appendChild(modal);
+        const bsModal = new bootstrap.Modal(modal);
+        bsModal.show();
+        modal.addEventListener('hidden.bs.modal', () => modal.remove());
+    });
+    });
+
+   /* ====== EDITAR PROFESOR ====== */
+    document.querySelectorAll('.btn-outline-secondary').forEach(btn => {
+    btn.addEventListener('click', async () => {
+        const id = btn.closest('tr').querySelector('td').dataset.id;
+        const res = await fetch(`ver_profesor.php?id=${id}`);
+        const data = await res.json();
+
+        const modal = document.createElement('div');
+        modal.className = 'modal fade';
+        modal.innerHTML = `
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+            <div class="modal-header bg-secondary text-white">
+                <h5 class="modal-title">Editar Profesor</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formEditarProfesor">
+                <div class="modal-body">
+                <input type="hidden" name="id" value="${id}">
+                <div class="row">
+                    <div class="col-md-6 mb-2">
+                    <label class="form-label">Departamento</label>
+                    <input type="text" name="departamento" class="form-control" value="${data.departamento}">
+                    </div>
+                    <div class="col-md-6 mb-2">
+                    <label class="form-label">Cargo</label>
+                    <input type="text" name="cargo" class="form-control" value="${data.cargo}">
+                    </div>
+                    <div class="col-md-6 mb-2">
+                    <label class="form-label">Teléfono</label>
+                    <input type="text" name="telefono" class="form-control" value="${data.telefono || ''}">
+                    </div>
+                    <div class="col-md-6 mb-2">
+                    <label class="form-label">Dirección</label>
+                    <input type="text" name="direccion" class="form-control" value="${data.direccion}">
+                    </div>
+                    <div class="mb-3">
+                    <label class="form-label">Formación Académica</label>
+                    <textarea name="formacion_academica" class="form-control" rows="3">${data.formacion_academica}</textarea>
+                    </div>
+                    <div class="mb-3">
+                    <label class="form-label">Estado</label>
+                    <select name="estatus" class="form-select">
+                        <option value="Activo" ${data.estatus === 'Activo' ? 'selected' : ''}>Activo</option>
+                        <option value="Inactivo" ${data.estatus === 'Inactivo' ? 'selected' : ''}>Inactivo</option>
+                    </select>
+                    </div>
+                </div>
+                </div>
+                <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="submit" class="btn btn-academic">Guardar Cambios</button>
+                </div>
+            </form>
+            </div>
+        </div>
+        `;
+        document.body.appendChild(modal);
+        const bsModal = new bootstrap.Modal(modal);
+        bsModal.show();
+
+        modal.querySelector('#formEditarProfesor').addEventListener('submit', async e => {
+        e.preventDefault();
+        const form = e.target;
+        const data = new FormData(form);
+        const res = await fetch('editar_profesor.php', { method: 'POST', body: data });
+        const result = await res.json();
+
+        const notif = document.createElement('div');
+        notif.className = `alert ${result.success ? 'alert-success' : 'alert-danger'} shadow position-fixed top-50 start-50 translate-middle text-center border`;
+        notif.style.zIndex = 2000;
+        notif.style.minWidth = '380px';
+        notif.innerHTML = `<strong>${result.message}</strong>`;
+        document.body.appendChild(notif);
+        setTimeout(() => notif.remove(), 2500);
+
+        if (result.success) {
+            bsModal.hide();
+            setTimeout(() => location.reload(), 1000);
+        }
+        });
+
+        modal.addEventListener('hidden.bs.modal', () => modal.remove());
+    });
+    });
+
+    /* ====== DESHABILITAR PROFESOR ====== */
+    document.querySelectorAll('.btn-outline-danger').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const id = btn.closest('tr').querySelector('td').dataset.id;
+
+        // Modal de confirmación
+        const modal = document.createElement('div');
+        modal.className = 'modal fade';
+        modal.innerHTML = `
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">Confirmar deshabilitación</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center">
+                <p>¿Estás seguro de que deseas <strong>deshabilitar</strong> este profesor?<br>
+                Su cuenta quedará marcada como inactiva, pero no será eliminada.</p>
+            </div>
+            <div class="modal-footer justify-content-center">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button class="btn btn-danger" id="confirmDisableBtn">Deshabilitar</button>
+            </div>
+            </div>
+        </div>
+        `;
+        document.body.appendChild(modal);
+        const bsModal = new bootstrap.Modal(modal);
+        bsModal.show();
+
+        modal.querySelector('#confirmDisableBtn').addEventListener('click', async () => {
+        const res = await fetch('deshabilitar_profesor.php', { method: 'POST', body: new URLSearchParams({ id }) });
+        const data = await res.json();
+
+        bsModal.hide();
+
+        const notif = document.createElement('div');
+        notif.className = `alert ${data.success ? 'alert-success' : 'alert-danger'} shadow position-fixed top-50 start-50 translate-middle text-center border`;
+        notif.style.zIndex = 2000;
+        notif.style.minWidth = '380px';
+        notif.innerHTML = `<strong>${data.message}</strong>`;
+        document.body.appendChild(notif);
+        setTimeout(() => notif.remove(), 2500);
+
+        if (data.success) setTimeout(() => location.reload(), 1000);
+        });
+
+        modal.addEventListener('hidden.bs.modal', () => modal.remove());
+    });
+    });
+
     </script>
 
-    <style>
-    .alert.position-fixed {
-        animation: aparecer 0.3s ease-out;
-    }
-    @keyframes aparecer {
-        from { opacity: 0; transform: translate(-50%, -40%); }
-        to { opacity: 1; transform: translate(-50%, -50%); }
-    }
-    </style>
-
+<style>
+.alert.position-fixed {
+  animation: aparecer 0.3s ease-out;
+}
+@keyframes aparecer {
+  from { opacity: 0; transform: translate(-50%, -40%); }
+  to { opacity: 1; transform: translate(-50%, -50%); }
+}
+</style>
 </body>
 </html>
