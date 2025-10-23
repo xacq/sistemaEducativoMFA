@@ -228,7 +228,7 @@ include __DIR__ . '/side_bar_director.php';
                                         </tr>
                                     <?php else: ?>
                                         <?php foreach ($estudiantes as $estudiante): ?>
-                                        <tr>
+                                        <tr data-id="<?php echo $estudiante['id']; ?>">
                                             <td><?php echo htmlspecialchars($estudiante['codigo_estudiante']); ?></td>
                                             <td><?php echo htmlspecialchars($estudiante['apellido'] . ' ' . $estudiante['nombre']); ?></td>
                                             <td><?php echo htmlspecialchars($estudiante['nombre_grado']); ?></td>
@@ -444,6 +444,168 @@ include __DIR__ . '/side_bar_director.php';
             submitBtn.textContent = "Guardar Estudiante";
         }
     });
+
+    /* ========= VER ESTUDIANTE ========= */
+    document.querySelectorAll('.btn-outline-primary').forEach(btn => {
+    btn.addEventListener('click', async () => {
+        const id = btn.closest('tr').dataset.id;
+        const res = await fetch(`ver_estudiante.php?id=${id}`);
+        const data = await res.json();
+
+        if (data.error) {
+        alert(data.error);
+        return;
+        }
+
+        const modal = document.createElement('div');
+        modal.className = 'modal fade';
+        modal.innerHTML = `
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">Información del Estudiante</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p><strong>Código:</strong> ${data.codigo_estudiante}</p>
+                <p><strong>Nombre:</strong> ${data.nombre} ${data.apellido}</p>
+                <p><strong>Correo:</strong> ${data.email}</p>
+                <p><strong>Grado:</strong> ${data.grado_nombre}</p>
+                <p><strong>Teléfono:</strong> ${data.telefono || '—'}</p>
+                <p><strong>Dirección:</strong> ${data.direccion || '—'}</p>
+                <p><strong>Estado:</strong> <span class="badge ${data.estado === 'Activo' ? 'bg-success' : 'bg-secondary'}">${data.estado}</span></p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+            </div>
+        </div>`;
+        document.body.appendChild(modal);
+        const bsModal = new bootstrap.Modal(modal);
+        bsModal.show();
+        modal.addEventListener('hidden.bs.modal', () => modal.remove());
+    });
+    });
+
+    /* ========= EDITAR ESTUDIANTE ========= */
+    document.querySelectorAll('.btn-outline-secondary').forEach(btn => {
+    btn.addEventListener('click', async () => {
+        const id = btn.closest('tr').dataset.id;
+        const res = await fetch(`ver_estudiante.php?id=${id}`);
+        const data = await res.json();
+
+        const modal = document.createElement('div');
+        modal.className = 'modal fade';
+        modal.innerHTML = `
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+            <div class="modal-header bg-secondary text-white">
+                <h5 class="modal-title">Editar Estudiante</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formEditarEstudiante">
+                <div class="modal-body">
+                <input type="hidden" name="id" value="${id}">
+                <div class="mb-2">
+                    <label class="form-label">Teléfono</label>
+                    <input type="text" name="telefono" class="form-control" value="${data.telefono || ''}">
+                </div>
+                <div class="mb-2">
+                    <label class="form-label">Dirección</label>
+                    <input type="text" name="direccion" class="form-control" value="${data.direccion || ''}">
+                </div>
+                <div class="mb-2">
+                    <label class="form-label">Estado</label>
+                    <select name="estado" class="form-select">
+                    <option value="Activo" ${data.estado === 'Activo' ? 'selected' : ''}>Activo</option>
+                    <option value="Inactivo" ${data.estado === 'Inactivo' ? 'selected' : ''}>Inactivo</option>
+                    </select>
+                </div>
+                </div>
+                <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="submit" class="btn btn-academic">Guardar Cambios</button>
+                </div>
+            </form>
+            </div>
+        </div>`;
+        document.body.appendChild(modal);
+        const bsModal = new bootstrap.Modal(modal);
+        bsModal.show();
+
+        modal.querySelector('#formEditarEstudiante').addEventListener('submit', async e => {
+        e.preventDefault();
+        const form = e.target;
+        const dataForm = new FormData(form);
+        const res = await fetch('editar_estudiante.php', { method: 'POST', body: dataForm });
+        const result = await res.json();
+
+        const notif = document.createElement('div');
+        notif.className = `alert ${result.success ? 'alert-success' : 'alert-danger'} shadow position-fixed top-50 start-50 translate-middle text-center border`;
+        notif.style.zIndex = 2000;
+        notif.style.minWidth = '380px';
+        notif.innerHTML = `<strong>${result.message}</strong>`;
+        document.body.appendChild(notif);
+        setTimeout(() => notif.remove(), 2500);
+
+        if (result.success) {
+            bsModal.hide();
+            setTimeout(() => location.reload(), 1000);
+        }
+        });
+
+        modal.addEventListener('hidden.bs.modal', () => modal.remove());
+    });
+    });
+
+    /* ========= DESHABILITAR ESTUDIANTE ========= */
+    document.querySelectorAll('.btn-outline-danger').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const id = btn.closest('tr').dataset.id;
+        const modal = document.createElement('div');
+        modal.className = 'modal fade';
+        modal.innerHTML = `
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">Confirmar Deshabilitación</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center">
+                <p>¿Deseas deshabilitar este estudiante?<br>Su cuenta quedará marcada como inactiva.</p>
+            </div>
+            <div class="modal-footer justify-content-center">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button class="btn btn-danger" id="confirmDisableBtn">Deshabilitar</button>
+            </div>
+            </div>
+        </div>`;
+        document.body.appendChild(modal);
+        const bsModal = new bootstrap.Modal(modal);
+        bsModal.show();
+
+        modal.querySelector('#confirmDisableBtn').addEventListener('click', async () => {
+        const res = await fetch('deshabilitar_estudiante.php', { method: 'POST', body: new URLSearchParams({ id }) });
+        const data = await res.json();
+
+        bsModal.hide();
+
+        const notif = document.createElement('div');
+        notif.className = `alert ${data.success ? 'alert-success' : 'alert-danger'} shadow position-fixed top-50 start-50 translate-middle text-center border`;
+        notif.style.zIndex = 2000;
+        notif.style.minWidth = '380px';
+        notif.innerHTML = `<strong>${data.message}</strong>`;
+        document.body.appendChild(notif);
+        setTimeout(() => notif.remove(), 2500);
+
+        if (data.success) setTimeout(() => location.reload(), 1000);
+        });
+
+        modal.addEventListener('hidden.bs.modal', () => modal.remove());
+    });
+    });
+
+
     </script>
 
     <style>

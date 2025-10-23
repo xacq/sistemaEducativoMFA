@@ -154,7 +154,9 @@ include __DIR__ . '/side_bar_profesor.php';
                                     </div>
                                 </div>
                                 <div class="card-footer bg-light">
-                                    <div class="d-grid"><button class="btn btn-academic" type="button">Ver detalles del curso</button></div>
+                                    <div class="d-grid">
+                                        <button class="btn btn-academic" type="button" data-id="<?php echo $curso['curso_id']; ?>">Ver detalles del curso</button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -199,5 +201,58 @@ include __DIR__ . '/side_bar_profesor.php';
 
     <script src="../js/jquery-3.3.1.min.js"></script>
     <script src="../js/bootstrap.bundle.min.js"></script>
+   <script>
+    // --- VER DETALLES DEL CURSO ---
+    document.querySelectorAll('.btn-academic').forEach(btn => {
+    btn.addEventListener('click', async () => {
+        const cursoId = btn.dataset.id;
+        if (!cursoId) return alert("No se encontró el ID del curso.");
+
+        try {
+        const res = await fetch(`ver_detalle_curso.php?curso_id=${cursoId}`);
+        const data = await res.json();
+
+        if (data.error) {
+            alert(data.error);
+            return;
+        }
+
+        const modal = document.createElement('div');
+        modal.className = 'modal fade';
+        modal.innerHTML = `
+            <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header card-header-academic text-white">
+                <h5 class="modal-title">Detalles del Curso</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                <h5>${data.materia} - ${data.grado}</h5>
+                <hr>
+                <p><strong>Código:</strong> ${data.codigo}</p>
+                <p><strong>Profesor:</strong> ${data.profesor}</p>
+                <p><strong>Estudiantes inscritos:</strong> ${data.total_estudiantes}</p>
+                <p><strong>Promedio general:</strong> ${Number(data.promedio_notas ?? 0).toFixed(2)}</p>
+                <p><strong>Asistencia promedio:</strong> ${Number(data.promedio_asistencia ?? 0).toFixed(2)}%</p>
+                <p><strong>Estado:</strong> <span class="badge ${data.estatus === 'Activo' ? 'bg-success' : 'bg-secondary'}">${data.estatus}</span></p>
+                </div>
+                <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                </div>
+            </div>
+            </div>`;
+        document.body.appendChild(modal);
+        const bsModal = new bootstrap.Modal(modal);
+        bsModal.show();
+        modal.addEventListener('hidden.bs.modal', () => modal.remove());
+        } catch (err) {
+        console.error(err);
+        alert("Error al cargar los detalles del curso.");
+        }
+    });
+    });
+    </script>
+
+
 </body>
 </html>
