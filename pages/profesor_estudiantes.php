@@ -1099,7 +1099,7 @@ include __DIR__ . '/side_bar_profesor.php';
             
             // Petición AJAX para obtener los detalles del estudiante
             $.ajax({
-                url: 'ajax/obtener_detalles_estudiante.php',
+                url: '../ajax/obtener_detalles_estudiante.php',
                 type: 'GET',
                 data: { estudiante_id: estudianteId },
                 dataType: 'json',

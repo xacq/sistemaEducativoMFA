@@ -1,80 +1,96 @@
 <?php
-// profesor/ajax/obtener_detalles_estudiante.php
+require_once '../config.php';
+header('Content-Type: application/json; charset=UTF-8');
 
-session_start();
-header('Content-Type: application/json');
-
-// Validaciones de seguridad
-if (empty($_SESSION['user_id']) || empty($_GET['estudiante_id'])) {
-    echo json_encode(['error' => 'Acceso no autorizado o ID de estudiante no proporcionado.']);
+// Seguridad básica
+if (!isset($_GET['estudiante_id']) || !is_numeric($_GET['estudiante_id'])) {
+    echo json_encode(['error' => 'ID de estudiante inválido.']);
     exit;
 }
 
-require_once '../../config.php';
-
 $estudiante_id = (int)$_GET['estudiante_id'];
-$response = [];
 
-// 1. Obtener datos del perfil del estudiante
-$stmt_profile = $mysqli->prepare("
-    SELECT 
-        u.nombre, u.apellido, u.email,
-        e.codigo_estudiante, e.fecha_nacimiento, e.genero, e.direccion, e.telefono,
-        e.tutor_nombre, e.tutor_telefono, e.fecha_inscripcion, e.foto_perfil, e.observaciones,
-        g.nombre as grado_nombre
-    FROM estudiantes e
-    JOIN usuarios u ON e.usuario_id = u.id
-    JOIN grados g ON e.grado_id = g.id
-    WHERE e.id = ?
-");
-$stmt_profile->bind_param('i', $estudiante_id);
-$stmt_profile->execute();
-$result_profile = $stmt_profile->get_result();
-$response['perfil'] = $result_profile->fetch_assoc();
-$stmt_profile->close();
+mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
-// 2. Obtener calificaciones
-$response['calificaciones'] = [];
-$stmt_grades = $mysqli->prepare("
-    SELECT 
-        c.nombre as curso_nombre,
-        ev.titulo as evaluacion_titulo,
-        cal.calificacion,
-        ev.puntaje_maximo
-    FROM calificaciones cal
-    JOIN matriculas m ON cal.matricula_id = m.id
-    JOIN evaluaciones ev ON cal.evaluacion_id = ev.id
-    JOIN cursos c ON m.curso_id = c.id
-    WHERE m.estudiante_id = ?
-    ORDER BY c.nombre, ev.fecha
-");
-$stmt_grades->bind_param('i', $estudiante_id);
-$stmt_grades->execute();
-$result_grades = $stmt_grades->get_result();
-while ($row = $result_grades->fetch_assoc()) {
-    $response['calificaciones'][] = $row;
+try {
+    // ===== PERFIL DEL ESTUDIANTE =====
+    $stmt = $mysqli->prepare("
+        SELECT 
+            e.id,
+            e.codigo_estudiante,
+            u.nombre,
+            u.apellido,
+            u.email,
+            e.fecha_nacimiento,
+            e.genero,
+            e.direccion,
+            e.tutor_nombre,
+            e.tutor_telefono,
+            e.estado,
+            e.foto_perfil,
+            e.observaciones,
+            g.nombre AS grado_nombre
+        FROM estudiantes e
+        JOIN usuarios u ON e.usuario_id = u.id
+        JOIN grados g ON e.grado_id = g.id
+        WHERE e.id = ?
+    ");
+    $stmt->bind_param('i', $estudiante_id);
+    $stmt->execute();
+    $perfil = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    if (!$perfil) {
+        echo json_encode(['error' => 'Estudiante no encontrado.']);
+        exit;
+    }
+
+    // ===== CALIFICACIONES =====
+    $stmt = $mysqli->prepare("
+        SELECT 
+            c.nombre AS curso_nombre,
+            ev.titulo AS evaluacion_titulo,
+            cal.calificacion,
+            ev.puntaje_maximo
+        FROM calificaciones cal
+        JOIN evaluaciones ev ON cal.evaluacion_id = ev.id
+        JOIN matriculas m ON cal.matricula_id = m.id
+        JOIN cursos c ON m.curso_id = c.id
+        WHERE m.estudiante_id = ?
+        ORDER BY ev.fecha DESC
+        LIMIT 20
+    ");
+    $stmt->bind_param('i', $estudiante_id);
+    $stmt->execute();
+    $result_cal = $stmt->get_result();
+    $calificaciones = $result_cal->fetch_all(MYSQLI_ASSOC);
+    $stmt->close();
+
+    // ===== ASISTENCIA (último mes) =====
+    $stmt = $mysqli->prepare("
+        SELECT 
+            a.fecha,
+            a.estado,
+            c.nombre AS curso_nombre
+        FROM asistencia a
+        JOIN matriculas m ON a.matricula_id = m.id
+        JOIN cursos c ON m.curso_id = c.id
+        WHERE m.estudiante_id = ?
+        AND a.fecha >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+        ORDER BY a.fecha DESC
+    ");
+    $stmt->bind_param('i', $estudiante_id);
+    $stmt->execute();
+    $result_asis = $stmt->get_result();
+    $asistencia = $result_asis->fetch_all(MYSQLI_ASSOC);
+    $stmt->close();
+
+    echo json_encode([
+        'perfil' => $perfil,
+        'calificaciones' => $calificaciones,
+        'asistencia' => $asistencia
+    ], JSON_UNESCAPED_UNICODE);
+
+} catch (Exception $e) {
+    echo json_encode(['error' => 'Error al obtener los datos: ' . $e->getMessage()]);
 }
-$stmt_grades->close();
-
-// 3. Obtener asistencia
-$response['asistencia'] = [];
-$stmt_attendance = $mysqli->prepare("
-    SELECT a.fecha, a.estado, c.nombre as curso_nombre
-    FROM asistencia a
-    JOIN matriculas m ON a.matricula_id = m.id
-    JOIN cursos c ON m.curso_id = c.id
-    WHERE m.estudiante_id = ? AND a.fecha >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH)
-    ORDER BY a.fecha DESC
-");
-$stmt_attendance->bind_param('i', $estudiante_id);
-$stmt_attendance->execute();
-$result_attendance = $stmt_attendance->get_result();
-while ($row = $result_attendance->fetch_assoc()) {
-    $response['asistencia'][] = $row;
-}
-$stmt_attendance->close();
-
-// Devolver la respuesta como JSON
-echo json_encode($response);
-$mysqli->close();
-?>
