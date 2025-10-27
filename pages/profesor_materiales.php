@@ -55,6 +55,12 @@ if ($profesorId === null) {
 
 $courses = [];
 $stmtCursos = $mysqli->prepare('SELECT id, nombre, codigo FROM cursos WHERE profesor_id = ? ORDER BY nombre');
+// ===== Tipos disponibles (ENUM fijos) =====
+$tipos = ['Documento', 'Presentación', 'Video', 'Enlace', 'Otro'];
+
+
+
+
 $stmtCursos->bind_param('i', $profesorId);
 $stmtCursos->execute();
 $resultCursos = $stmtCursos->get_result();
@@ -64,6 +70,9 @@ while ($row = $resultCursos->fetch_assoc()) {
 $stmtCursos->close();
 
 $courseFilter = isset($_GET['course']) ? (int)$_GET['course'] : 0;
+$tipoFilter = isset($_GET['tipo']) ? trim($_GET['tipo']) : '';
+$unidadFilter = isset($_GET['unidad']) ? trim($_GET['unidad']) : '';
+
 $materials = [];
 $sqlMateriales = "SELECT m.id, m.titulo, m.descripcion, m.tipo, m.unidad, m.url, m.file_path, m.share_with_students, m.notify_students, m.fecha_subida,
                          c.nombre AS curso_nombre, c.codigo
@@ -77,7 +86,19 @@ if ($courseFilter) {
     $params[] = $courseFilter;
     $types .= 'i';
 }
+if ($tipoFilter !== '') {
+    $sqlMateriales .= ' AND m.tipo = ?';
+    $params[] = $tipoFilter;
+    $types .= 's';
+}
+if ($unidadFilter !== '') {
+    $sqlMateriales .= ' AND m.unidad = ?';
+    $params[] = $unidadFilter;
+    $types .= 's';
+}
 $sqlMateriales .= ' ORDER BY m.fecha_subida DESC';
+
+
 $stmtMateriales = $mysqli->prepare($sqlMateriales);
 $stmtMateriales->bind_param($types, ...$params);
 $stmtMateriales->execute();
@@ -170,9 +191,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
+        $url_final = $url !== '' ? $url : null;
         $insert = $mysqli->prepare('INSERT INTO materiales (curso_id, profesor_id, titulo, descripcion, tipo, unidad, url, file_path, share_with_students, notify_students) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
         if ($insert) {
-            $insert->bind_param('iissssssii', $cursoId, $profesorId, $titulo, $descripcion, $tipo, $unidad, $url ?: null, $storedFile, $share, $notify);
+            $insert->bind_param('iissssssii', $cursoId, $profesorId, $titulo, $descripcion, $tipo, $unidad, $url_final, $storedFile, $share, $notify);
+
             if ($insert->execute()) {
                 flash_push('success', 'Material cargado correctamente.');
             } else {
@@ -296,56 +319,54 @@ include __DIR__ . '/side_bar_profesor.php';
                     </div>
                 </div>
 
-                <!-- Filter and Search -->
-                <div class="row mb-4">
-                    <div class="col-md-3">
-                        <div class="input-group">
-                            <span class="input-group-text">Curso</span>
-                            <select class="form-select" id="courseSelect">
-                                <option selected>Matemáticas - 6° Secundaria</option>
-                                <option>Matemáticas - 5° Secundaria</option>
-                                <option>Física - 6° Secundaria</option>
-                                <option>Física - 5° Secundaria</option>
-                                <option>Química - 6° Secundaria</option>
-                                <option>Química - 5° Secundaria</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="input-group">
-                            <span class="input-group-text">Tipo</span>
-                            <select class="form-select">
-                                <option selected>Todos</option>
-                                <option>Presentaciones</option>
-                                <option>Documentos</option>
-                                <option>Videos</option>
-                                <option>Enlaces</option>
-                                <option>Otros</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="input-group">
-                            <span class="input-group-text">Unidad</span>
-                            <select class="form-select">
-                                <option selected>Todas</option>
-                                <option>Unidad 1</option>
-                                <option>Unidad 2</option>
-                                <option>Unidad 3</option>
-                                <option>Unidad 4</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="input-group">
-                            <input type="text" class="form-control" placeholder="Buscar material...">
-                            <button class="btn btn-academic" type="button">
-                                <i class="bi bi-search"></i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
+<!-- ================== Filtros ================== -->
+<div class="row mb-4">
+    <form id="filterForm" class="row gx-2">
+        <!-- Curso -->
+        <div class="col-md-4">
+            <div class="input-group">
+                <span class="input-group-text">Curso</span>
+                <select class="form-select" id="courseSelect" name="curso">
+                    <option value="">Todos los cursos</option>
+                    <?php foreach ($courses as $course): ?>
+                        <option value="<?php echo (int)$course['id']; ?>"
+                            <?php echo ($courseFilter === (int)$course['id']) ? 'selected' : ''; ?>>
+                            <?php echo htmlspecialchars($course['nombre'] . ' (' . $course['codigo'] . ')', ENT_QUOTES, 'UTF-8'); ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
             </div>
+        </div>
+
+        <!-- Tipo -->
+        <div class="col-md-4">
+            <div class="input-group">
+                <span class="input-group-text">Tipo</span>
+                <select class="form-select" id="tipoSelect" name="tipo">
+                    <option value="">Todos</option>
+                    <?php foreach ($tipos as $t): ?>
+                        <option value="<?php echo htmlspecialchars($t, ENT_QUOTES, 'UTF-8'); ?>"
+                            <?php echo ($tipoFilter === $t) ? 'selected' : ''; ?>>
+                            <?php echo htmlspecialchars($t, ENT_QUOTES, 'UTF-8'); ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+        </div>
+
+        <!-- Búsqueda -->
+        <div class="col-md-4">
+            <div class="input-group">
+                <input type="text" class="form-control" name="busqueda" id="busquedaInput"
+                       placeholder="Buscar material...">
+                <button class="btn btn-academic" type="button" id="buscarBtn">
+                    <i class="bi bi-search"></i>
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+
 
             <?php foreach (['success' => 'success', 'error' => 'danger', 'warning' => 'warning'] as $type => $bootstrap): ?>
                 <?php foreach ($messages[$type] as $message): ?>
@@ -468,22 +489,24 @@ include __DIR__ . '/side_bar_profesor.php';
                                     <td><?php echo htmlspecialchars($material['fecha_subida'], ENT_QUOTES, 'UTF-8'); ?></td>
                                     <td class="text-end">
                                         <?php if ($material['file_path']): ?>
-                                            <a class="btn btn-sm btn-outline-primary" href="../<?php echo htmlspecialchars($material['file_path'], ENT_QUOTES, 'UTF-8'); ?>" target="_blank"><i class="bi bi-download"></i></a>
+                                            <a class="btn btn-sm btn-outline-primary" href="../<?php echo htmlspecialchars($material['file_path'], ENT_QUOTES, 'UTF-8'); ?>" target="_blank" title="Descargar archivo">
+                                                <i class="bi bi-download"></i>
+                                            </a>
                                         <?php elseif ($material['url']): ?>
-                                            <a class="btn btn-sm btn-outline-primary" href="<?php echo htmlspecialchars($material['url'], ENT_QUOTES, 'UTF-8'); ?>" target="_blank"><i class="bi bi-box-arrow-up-right"></i></a>
+                                            <a class="btn btn-sm btn-outline-primary" href="<?php echo htmlspecialchars($material['url'], ENT_QUOTES, 'UTF-8'); ?>" target="_blank" title="Abrir enlace">
+                                                <i class="bi bi-box-arrow-up-right"></i>
+                                            </a>
                                         <?php endif; ?>
-                                        <form method="post" class="d-inline">
-                                            <input type="hidden" name="action" value="toggle_share">
-                                            <input type="hidden" name="material_id" value="<?php echo (int)$material['id']; ?>">
-                                            <button type="submit" class="btn btn-sm btn-outline-secondary ms-1" title="Cambiar visibilidad">
-                                                <i class="bi bi-eye<?php echo (int)$material['share_with_students'] ? '' : '-slash'; ?>"></i>
-                                            </button>
-                                        </form>
-                                        <form method="post" class="d-inline" onsubmit="return confirm('¿Desea eliminar este material?');">
-                                            <input type="hidden" name="action" value="delete">
-                                            <input type="hidden" name="material_id" value="<?php echo (int)$material['id']; ?>">
-                                            <button type="submit" class="btn btn-sm btn-outline-danger ms-1"><i class="bi bi-trash"></i></button>
-                                        </form>
+
+                                        <button class="btn btn-sm btn-outline-info btn-ver ms-1" data-id="<?php echo (int)$material['id']; ?>" title="Ver detalles">
+                                            <i class="bi bi-eye"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-secondary btn-toggle ms-1" data-id="<?php echo (int)$material['id']; ?>" title="Cambiar visibilidad">
+                                            <i class="bi bi-eye<?php echo (int)$material['share_with_students'] ? '' : '-slash'; ?>"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-danger btn-delete ms-1" data-id="<?php echo (int)$material['id']; ?>" title="Eliminar material">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
@@ -495,6 +518,101 @@ include __DIR__ . '/side_bar_profesor.php';
         </div>
     </div>
 </div>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+
+<!-- Bootstrap JS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<!-- jQuery -->
+<script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+
+<!-- SweetAlert2 -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<script>
+$(document).ready(function() {
+
+    // Ver detalles del material
+    $('.btn-ver').on('click', function() {
+        const id = $(this).data('id');
+        $.post('../ajax/ajax_materiales.php', { action: 'get', id }, function(data) {
+            if (data && !data.error) {
+                Swal.fire({
+                    title: data.titulo,
+                    html: `
+                        <p><strong>Curso:</strong> ${data.curso_nombre}</p>
+                        <p><strong>Tipo:</strong> ${data.tipo}</p>
+                        <p><strong>Unidad:</strong> ${data.unidad}</p>
+                        <p><strong>Descripción:</strong> ${data.descripcion || '(Sin descripción)'}</p>
+                        ${data.file_path ? `<a href="../${data.file_path}" class="btn btn-academic" target="_blank">📄 Ver archivo</a>` : ''}
+                        ${data.url ? `<a href="${data.url}" class="btn btn-outline-info ms-2" target="_blank">🌐 Abrir enlace</a>` : ''}
+                    `,
+                    confirmButtonText: 'Cerrar',
+                    confirmButtonColor: '#3c8dbc'
+                });
+            } else {
+                Swal.fire('Error', data.error || 'No se pudo cargar el material.', 'error');
+            }
+        }, 'json');
+    });
+
+    // Alternar visibilidad
+    $('.btn-toggle').on('click', function() {
+        const id = $(this).data('id');
+        $.post('../ajax/ajax_materiales.php', { action: 'toggle', id }, function(resp) {
+            Swal.fire({
+                icon: resp.success ? 'success' : 'error',
+                title: resp.message,
+                timer: 1500,
+                showConfirmButton: false
+            }).then(() => location.reload());
+        }, 'json');
+    });
+
+    // Eliminar material
+    $('.btn-delete').on('click', function() {
+        const id = $(this).data('id');
+        Swal.fire({
+            title: '¿Eliminar material?',
+            text: 'Esta acción no se puede deshacer.',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'Sí, eliminar',
+            cancelButtonText: 'Cancelar'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                $.post('../ajax/ajax_materiales.php', { action: 'delete', id }, function(resp) {
+                    Swal.fire({
+                        icon: resp.success ? 'success' : 'error',
+                        title: resp.message,
+                        timer: 1500,
+                        showConfirmButton: false
+                    }).then(() => location.reload());
+                }, 'json');
+            }
+        });
+    });
+    // Escucha cambios en los filtros
+    $('#filterForm select, #buscarBtn').on('change click', function () {
+        const data = {
+            action: 'filter',
+            curso: $('#courseSelect').val(),
+            tipo: $('#tipoSelect').val(),
+            busqueda: $('#busquedaInput').val()
+        };
+
+        $.post('../ajax/ajax_materiales.php', data, function (resp) {
+            if (resp.success) {
+                $('.table tbody').html(resp.html);
+            } else {
+                Swal.fire('Error', resp.message || 'No se pudo aplicar el filtro.', 'error');
+            }
+        }, 'json');
+    });
+
+});
+</script>
+
 </body>
 </html>
