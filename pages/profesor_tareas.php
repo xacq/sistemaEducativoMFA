@@ -28,12 +28,13 @@ $stmt_profesor->close();
 // 2. Obtener los cursos del profesor para el filtro
 $cursos_profesor = [];
 $stmt_cursos = $mysqli->prepare("
-    SELECT c.id, c.nombre, g.nombre AS grado
+    SELECT c.id, c.nombre, c.seccion, g.nombre AS grado
     FROM cursos c
     JOIN grados g ON c.grado_id = g.id
     WHERE c.profesor_id = ? AND c.estatus = 'Activo'
     ORDER BY g.id, c.nombre
 ");
+
 $stmt_cursos->bind_param('i', $profesor_id);
 $stmt_cursos->execute();
 $result_cursos = $stmt_cursos->get_result();
@@ -113,6 +114,77 @@ while ($row = $result_pendientes->fetch_assoc()) {
 }
 $stmt_pendientes->close();
 
+// === 6. Generar estadísticas de tareas por curso (desde $tareas) ===
+$estadisticas_cursos = [];
+$curso_stats = [];
+
+foreach ($tareas as $t) {
+    $curso = $t['curso_nombre'] . ' - ' . $t['grado_nombre'];
+
+    if (!isset($curso_stats[$curso])) {
+        $curso_stats[$curso] = [
+            'curso' => $curso,
+            'total_tareas' => 0,
+            'activas' => 0,
+            'completadas' => 0,
+            'promedio' => 0,
+            'sum_promedio' => 0,
+            'cuenta' => 0
+        ];
+    }
+
+    $curso_stats[$curso]['total_tareas']++;
+
+    $fecha_entrega = new DateTime($t['fecha_entrega']);
+    $hoy = new DateTime();
+
+    if ($fecha_entrega >= $hoy) {
+        $curso_stats[$curso]['activas']++;
+    } else {
+        $curso_stats[$curso]['completadas']++;
+    }
+
+    $total_estudiantes = (int)$t['total_estudiantes'];
+    $total_entregas = (int)$t['total_entregas'];
+    $porcentaje = $total_estudiantes > 0 ? round(($total_entregas / $total_estudiantes) * 100, 1) : 0;
+    $curso_stats[$curso]['sum_promedio'] += $porcentaje;
+    $curso_stats[$curso]['cuenta']++;
+}
+
+// Calcular promedio final
+foreach ($curso_stats as &$c) {
+    $c['promedio'] = $c['cuenta'] > 0 ? round($c['sum_promedio'] / $c['cuenta'], 1) : 0;
+    unset($c['sum_promedio'], $c['cuenta']);
+}
+
+$estadisticas_cursos = array_values($curso_stats);
+
+// === 7. Estudiantes con tareas pendientes (simples) ===
+$pendientes = [];
+foreach ($pendientes_calificar as $p) {
+    $nombre_estudiante = $p['estudiante_apellido'] . ', ' . $p['estudiante_nombre'];
+    $curso = $p['curso_nombre'] . ' - ' . $p['grado_nombre'];
+    $clave = $nombre_estudiante . '|' . $curso;
+
+    if (!isset($pendientes[$clave])) {
+        $pendientes[$clave] = [
+            'estudiante' => $nombre_estudiante,
+            'curso' => $curso,
+            'tareas_pendientes' => 0,
+            'tareas_vencidas' => 0
+        ];
+    }
+
+    $pendientes[$clave]['tareas_pendientes']++;
+    $fecha_envio = new DateTime($p['fecha_envio']);
+    $hoy = new DateTime();
+    if ($fecha_envio < $hoy) {
+        $pendientes[$clave]['tareas_vencidas']++;
+    }
+}
+$pendientes = array_values($pendientes);
+
+
 include __DIR__ . '/side_bar_profesor.php';
 ?>
 <!DOCTYPE html>
@@ -183,7 +255,7 @@ include __DIR__ . '/side_bar_profesor.php';
                 <option value="">Todos mis cursos</option>
                 <?php foreach ($cursos_profesor as $curso): ?>
                     <option value="<?php echo $curso['id']; ?>" <?php if(isset($_GET['curso_id']) && $_GET['curso_id'] == $curso['id']) echo 'selected'; ?>>
-                        <?php echo htmlspecialchars($curso['nombre'] . ' - ' . $curso['grado']); ?>
+                        <?php echo htmlspecialchars($curso['nombre'] . ' - ' . $curso['grado'] . ' ' . $curso['seccion']); ?>
                     </option>
                 <?php endforeach; ?>
             </select>
@@ -279,11 +351,11 @@ include __DIR__ . '/side_bar_profesor.php';
                                 <td><?php echo $total_entregas . '/' . $total_estudiantes; ?></td>
                                 <td><?php echo $total_calificadas . '/' . $total_entregas; ?></td>
                                 <td>
-                                    <!-- Deberás implementar el modal dinámico con AJAX aquí -->
-                                    <button class="btn btn-sm btn-outline-primary" title="Ver Detalles y Entregas"><i class="bi bi-eye"></i></button>
-                                    <button class="btn btn-sm btn-outline-secondary" title="Editar Tarea"><i class="bi bi-pencil"></i></button>
-                                    <button class="btn btn-sm btn-outline-danger" title="Eliminar Tarea"><i class="bi bi-trash"></i></button>
+                                    <button class="btn btn-sm btn-outline-primary btn-ver" data-id="<?php echo $tarea['tarea_id']; ?>" title="Ver Detalles y Entregas"><i class="bi bi-eye"></i></button>
+                                    <button class="btn btn-sm btn-outline-secondary btn-editar" data-id="<?php echo $tarea['tarea_id']; ?>" title="Editar Tarea"><i class="bi bi-pencil"></i></button>
+                                    <button class="btn btn-sm btn-outline-danger btn-deshabilitar" data-id="<?php echo $tarea['tarea_id']; ?>" title="Deshabilitar Tarea"><i class="bi bi-trash"></i></button>
                                 </td>
+
                             </tr>
                         <?php endforeach; ?>
                     <?php endif; ?>
@@ -357,56 +429,34 @@ include __DIR__ . '/side_bar_profesor.php';
                                             </tr>
                                         </thead>
                                         <tbody>
+                                    <?php if (empty($estadisticas_cursos)): ?>
+                                        <tr><td colspan="5" class="text-center text-muted">No hay tareas registradas.</td></tr>
+                                    <?php else: ?>
+                                        <?php 
+                                            $total_tareas = $total_activas = $total_completadas = $promedio_general = 0;
+                                            foreach ($estadisticas_cursos as $curso):
+                                                $total_tareas += $curso['total_tareas'];
+                                                $total_activas += $curso['activas'];
+                                                $total_completadas += $curso['completadas'];
+                                                $promedio_general += $curso['promedio'];
+                                        ?>
                                             <tr>
-                                                <td>Matemáticas - 6° Secundaria</td>
-                                                <td>12</td>
-                                                <td>3</td>
-                                                <td>9</td>
-                                                <td>85.6</td>
+                                                <td><?php echo htmlspecialchars($curso['curso']); ?></td>
+                                                <td><?php echo $curso['total_tareas']; ?></td>
+                                                <td><?php echo $curso['activas']; ?></td>
+                                                <td><?php echo $curso['completadas']; ?></td>
+                                                <td><?php echo $curso['promedio']; ?></td>
                                             </tr>
-                                            <tr>
-                                                <td>Matemáticas - 5° Secundaria</td>
-                                                <td>10</td>
-                                                <td>2</td>
-                                                <td>8</td>
-                                                <td>83.2</td>
-                                            </tr>
-                                            <tr>
-                                                <td>Física - 6° Secundaria</td>
-                                                <td>8</td>
-                                                <td>2</td>
-                                                <td>6</td>
-                                                <td>82.5</td>
-                                            </tr>
-                                            <tr>
-                                                <td>Física - 5° Secundaria</td>
-                                                <td>8</td>
-                                                <td>1</td>
-                                                <td>7</td>
-                                                <td>80.8</td>
-                                            </tr>
-                                            <tr>
-                                                <td>Química - 6° Secundaria</td>
-                                                <td>7</td>
-                                                <td>2</td>
-                                                <td>5</td>
-                                                <td>81.3</td>
-                                            </tr>
-                                            <tr>
-                                                <td>Química - 5° Secundaria</td>
-                                                <td>7</td>
-                                                <td>1</td>
-                                                <td>6</td>
-                                                <td>79.5</td>
-                                            </tr>
-                                            <tr class="table-academic">
-                                                <td><strong>Total</strong></td>
-                                                <td><strong>52</strong></td>
-                                                <td><strong>11</strong></td>
-                                                <td><strong>41</strong></td>
-                                                <td><strong>82.2</strong></td>
-                                            </tr>
-                                        </tbody>
+                                        <?php endforeach; ?>
+                                        <tr class="table-academic">
+                                            <td><strong>Total</strong></td>
+                                            <td><strong><?php echo $total_tareas; ?></strong></td>
+                                            <td><strong><?php echo $total_activas; ?></strong></td>
+                                            <td><strong><?php echo $total_completadas; ?></strong></td>
+                                            <td><strong><?php echo $total_tareas > 0 ? round($promedio_general / count($estadisticas_cursos), 1) : 0; ?></strong></td>
+                                        </tr>
+                                    <?php endif; ?>
+                                    </tbody>
                                     </table>
                                 </div>
                             </div>
@@ -430,46 +480,22 @@ include __DIR__ . '/side_bar_profesor.php';
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            <tr>
-                                                <td>Fernando Quispe</td>
-                                                <td>Matemáticas - 6° Secundaria</td>
-                                                <td>2</td>
-                                                <td>1</td>
-                                                <td>
-                                                    <button class="btn btn-sm btn-outline-warning"><i class="bi bi-chat-dots"></i></button>
-                                                    <button class="btn btn-sm btn-outline-info"><i class="bi bi-envelope"></i></button>
-                                                </td>
-                                            </tr>
-                                            <tr>
-                                                <td>Luis Mamani</td>
-                                                <td>Física - 5° Secundaria</td>
-                                                <td>3</td>
-                                                <td>2</td>
-                                                <td>
-                                                    <button class="btn btn-sm btn-outline-warning"><i class="bi bi-chat-dots"></i></button>
-                                                    <button class="btn btn-sm btn-outline-info"><i class="bi bi-envelope"></i></button>
-                                                </td>
-                                            </tr>
-                                            <tr>
-                                                <td>Patricia Flores</td>
-                                                <td>Química - 6° Secundaria</td>
-                                                <td>2</td>
-                                                <td>0</td>
-                                                <td>
-                                                    <button class="btn btn-sm btn-outline-warning"><i class="bi bi-chat-dots"></i></button>
-                                                    <button class="btn btn-sm btn-outline-info"><i class="bi bi-envelope"></i></button>
-                                                </td>
-                                            </tr>
-                                            <tr>
-                                                <td>Jorge Apaza</td>
-                                                <td>Física - 6° Secundaria</td>
-                                                <td>1</td>
-                                                <td>1</td>
-                                                <td>
-                                                    <button class="btn btn-sm btn-outline-warning"><i class="bi bi-chat-dots"></i></button>
-                                                    <button class="btn btn-sm btn-outline-info"><i class="bi bi-envelope"></i></button>
-                                                </td>
-                                            </tr>
+                                        <?php if (empty($pendientes)): ?>
+                                            <tr><td colspan="5" class="text-center text-muted">Todos los estudiantes están al día 🎉</td></tr>
+                                        <?php else: ?>
+                                            <?php foreach ($pendientes as $p): ?>
+                                                <tr>
+                                                    <td><?php echo htmlspecialchars($p['estudiante']); ?></td>
+                                                    <td><?php echo htmlspecialchars($p['curso']); ?></td>
+                                                    <td><?php echo $p['tareas_pendientes']; ?></td>
+                                                    <td><?php echo $p['tareas_vencidas']; ?></td>
+                                                    <td>
+                                                        <button class="btn btn-sm btn-outline-warning" title="Enviar recordatorio"><i class="bi bi-chat-dots"></i></button>
+                                                        <button class="btn btn-sm btn-outline-info" title="Enviar correo"><i class="bi bi-envelope"></i></button>
+                                                    </td>
+                                                </tr>
+                                            <?php endforeach; ?>
+                                        <?php endif; ?>
                                         </tbody>
                                     </table>
                                 </div>
@@ -1130,5 +1156,100 @@ include __DIR__ . '/side_bar_profesor.php';
     <!-- Scripts -->
     <script src="../js/jquery-3.3.1.min.js"></script>
     <script src="../js/bootstrap.bundle.min.js"></script>
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+    $(document).ready(function() {
+        // Ver tarea
+        $('.btn-ver').on('click', function() {
+            const id = $(this).data('id');
+            $.get('ver_tarea.php', { id }, function(data) {
+                if (data) {
+                    Swal.fire({
+                        title: data.titulo,
+                        html: `
+                            <p><strong>Curso:</strong> ${data.curso_nombre} - ${data.grado_nombre} ${data.seccion}</p>
+                            <p><strong>Tipo:</strong> ${data.tipo}</p>
+                            <p><strong>Fecha de entrega:</strong> ${data.fecha_entrega}</p>
+                            <p><strong>Descripción:</strong> ${data.descripcion || '(Sin descripción)'}</p>
+                            <p><strong>Instrucciones:</strong> ${data.instrucciones || '(No especificadas)'}</p>
+                            <p><strong>Recursos:</strong> ${data.recursos || '(Ninguno)'}</p>
+                        `,
+                        icon: 'info',
+                        confirmButtonText: 'Cerrar',
+                        confirmButtonColor: '#3c8dbc'
+                    });
+                }
+            }, 'json');
+        });
+
+        // Editar tarea
+        $('.btn-editar').on('click', function() {
+            const id = $(this).data('id');
+            $.get('ver_tarea.php', { id }, function(data) {
+                if (data) {
+                    Swal.fire({
+                        title: 'Editar Tarea',
+                        html: `
+                            <input type="hidden" id="edit-id" value="${data.id}">
+                            <input id="edit-titulo" class="swal2-input" value="${data.titulo}">
+                            <textarea id="edit-descripcion" class="swal2-textarea">${data.descripcion || ''}</textarea>
+                            <input id="edit-fecha" type="date" class="swal2-input" value="${data.fecha_entrega}">
+                        `,
+                        showCancelButton: true,
+                        confirmButtonText: 'Guardar',
+                        cancelButtonText: 'Cancelar',
+                        preConfirm: () => {
+                            return {
+                                id: $('#edit-id').val(),
+                                titulo: $('#edit-titulo').val(),
+                                descripcion: $('#edit-descripcion').val(),
+                                fecha_entrega: $('#edit-fecha').val()
+                            };
+                        }
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            $.post('editar_tarea.php', result.value, function(resp) {
+                                Swal.fire({
+                                    icon: resp.success ? 'success' : 'error',
+                                    title: resp.message,
+                                    timer: 2000,
+                                    showConfirmButton: false
+                                }).then(() => location.reload());
+                            }, 'json');
+                        }
+                    });
+                }
+            }, 'json');
+        });
+
+        // Deshabilitar tarea
+        $('.btn-deshabilitar').on('click', function() {
+            const id = $(this).data('id');
+            Swal.fire({
+                title: '¿Deshabilitar tarea?',
+                text: 'Esta acción marcará la tarea como deshabilitada.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, deshabilitar',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#d33'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    $.post('deshabilitar_tarea.php', { id }, function(resp) {
+                        Swal.fire({
+                            icon: resp.success ? 'success' : 'error',
+                            title: resp.message,
+                            timer: 2000,
+                            showConfirmButton: false
+                        }).then(() => location.reload());
+                    }, 'json');
+                }
+            });
+        });
+    });
+    </script>
+
+
 </body>
 </html>
