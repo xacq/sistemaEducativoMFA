@@ -31,7 +31,7 @@ $stmt_cursos = $mysqli->prepare("
     SELECT c.id, c.nombre, g.nombre AS grado
     FROM cursos c
     JOIN grados g ON c.grado_id = g.id
-    WHERE c.profesor_id = ? AND c.estatus = 'Activo'
+    WHERE c.profesor_id = ?
     ORDER BY g.id, c.nombre
 ");
 $stmt_cursos->bind_param('i', $profesor_id);
@@ -243,11 +243,48 @@ include __DIR__ . '/side_bar_profesor.php';
         <?php endif; ?>
     </div>
 </div>
+<?php
+// Rango de fechas (puedes ajustarlo)
+$inicio_mes = date('Y-m-01');
+$fin_mes = date('Y-m-t');
+
+// Obtenemos asistencia del mes para cada estudiante del curso
+$stmt_mes = $mysqli->prepare("
+    SELECT 
+        e.id AS estudiante_id,
+        CONCAT(u.apellido, ', ', u.nombre) AS estudiante,
+        a.fecha,
+        a.estado
+    FROM asistencia a
+    JOIN matriculas m ON a.matricula_id = m.id
+    JOIN estudiantes e ON m.estudiante_id = e.id
+    JOIN usuarios u ON e.usuario_id = u.id
+    WHERE m.curso_id = ? AND a.fecha BETWEEN ? AND ?
+    ORDER BY u.apellido, u.nombre, a.fecha
+");
+$stmt_mes->bind_param('iss', $curso_id_seleccionado, $inicio_mes, $fin_mes);
+$stmt_mes->execute();
+$result_mes = $stmt_mes->get_result();
+
+$asistencias_mes = [];
+while ($row = $result_mes->fetch_assoc()) {
+    $asistencias_mes[$row['estudiante_id']]['nombre'] = $row['estudiante'];
+    $asistencias_mes[$row['estudiante_id']]['asistencias'][$row['fecha']] = $row['estado'];
+}
+$stmt_mes->close();
+
+// Generamos cabecera de días (1 al 15, por ejemplo)
+$dias_mes = [];
+for ($i = 1; $i <= 15; $i++) {
+    $dias_mes[] = str_pad($i, 2, '0', STR_PAD_LEFT);
+}
+?>
+
 
                 <!-- Monthly Attendance -->
                 <div class="card mb-4">
                     <div class="card-header card-header-academic">
-                        <h5 class="mb-0 text-white">Registro Mensual - Junio 2025</h5>
+                        <h5 class="mb-0 text-white">Registro Mensual - <?php echo date('F Y'); ?></h5>
                     </div>
                     <div class="card-body">
                         <div class="table-responsive">
@@ -255,137 +292,72 @@ include __DIR__ . '/side_bar_profesor.php';
                                 <thead class="table-academic">
                                     <tr>
                                         <th>Estudiante</th>
-                                        <th>1</th>
-                                        <th>2</th>
-                                        <th>3</th>
-                                        <th>4</th>
-                                        <th>5</th>
-                                        <th>6</th>
-                                        <th>7</th>
-                                        <th>8</th>
-                                        <th>9</th>
-                                        <th>10</th>
-                                        <th>11</th>
-                                        <th>12</th>
-                                        <th>13</th>
-                                        <th>14</th>
-                                        <th>15</th>
+                                        <?php foreach ($dias_mes as $dia): ?>
+                                            <th><?php echo intval($dia); ?></th>
+                                        <?php endforeach; ?>
                                         <th>%</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr>
-                                        <td>Alejandro Gómez</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-warning">T</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-danger">A</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td>93%</td>
-                                    </tr>
-                                    <tr>
-                                        <td>Carla Mendoza</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td>100%</td>
-                                    </tr>
-                                    <tr>
-                                        <td>Daniel Flores</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-warning">T</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-warning">T</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-danger">A</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-warning">T</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-warning">T</td>
-                                        <td>87%</td>
-                                    </tr>
-                                    <tr>
-                                        <td>Elena Vargas</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td>100%</td>
-                                    </tr>
-                                    <tr>
-                                        <td>Fernando Quispe</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-danger">A</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-danger">A</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-warning">T</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-danger">A</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-danger">A</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-success">P</td>
-                                        <td class="table-danger">A</td>
-                                        <td>73%</td>
-                                    </tr>
+                                    <?php foreach ($asistencias_mes as $estudiante_id => $data): 
+                                        $total_dias = count($dias_mes);
+                                        $presentes = 0;
+                                    ?>
+                                        <tr>
+                                            <td><?php echo htmlspecialchars($data['nombre']); ?></td>
+                                            <?php foreach ($dias_mes as $dia): 
+                                                $fecha_actual = date('Y-m') . '-' . $dia;
+                                                $estado = $data['asistencias'][$fecha_actual] ?? null;
+                                                $clase = '';
+                                                $simbolo = '';
+                                                if ($estado == 'Presente') { $clase = 'table-success'; $simbolo = 'P'; $presentes++; }
+                                                elseif ($estado == 'Tarde') { $clase = 'table-warning'; $simbolo = 'T'; $presentes += 0.5; }
+                                                elseif ($estado == 'Ausente') { $clase = 'table-danger'; $simbolo = 'A'; }
+                                            ?>
+                                                <td class="<?php echo $clase; ?>"><?php echo $simbolo; ?></td>
+                                            <?php endforeach; ?>
+                                            <td><?php echo round(($presentes / $total_dias) * 100, 0) . '%'; ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
                                 </tbody>
                             </table>
-                        </div>
-                        <div class="mt-3">
-                            <p><small class="text-muted">P: Presente, T: Tardanza, A: Ausente, J: Justificado</small></p>
                         </div>
                     </div>
                 </div>
 
+
                 <!-- Attendance Statistics -->
                 <div class="row mb-4">
+                    <!-- Tabla de estadísticas generales -->
                     <div class="col-md-6">
                         <div class="card h-100">
                             <div class="card-header card-header-academic">
                                 <h5 class="mb-0 text-white">Estadísticas de Asistencia</h5>
                             </div>
                             <div class="card-body">
+                                <?php
+                                $stmt_estad = $mysqli->prepare("
+                                    SELECT 
+                                        CONCAT(u.apellido, ', ', u.nombre) AS estudiante,
+                                        SUM(a.estado = 'Presente') AS presentes,
+                                        SUM(a.estado = 'Tarde') AS tardanzas,
+                                        SUM(a.estado = 'Ausente') AS ausencias,
+                                        COUNT(a.id) AS total_dias
+                                    FROM asistencia a
+                                    JOIN matriculas m ON a.matricula_id = m.id
+                                    JOIN estudiantes e ON m.estudiante_id = e.id
+                                    JOIN usuarios u ON e.usuario_id = u.id
+                                    WHERE m.curso_id = ?
+                                    GROUP BY e.id
+                                    ORDER BY u.apellido
+                                ");
+                                $stmt_estad->bind_param('i', $curso_id_seleccionado);
+                                $stmt_estad->execute();
+                                $result_estad = $stmt_estad->get_result();
+
+                                $sum_porcentaje = 0;
+                                $total_est = 0;
+                                ?>
                                 <div class="table-responsive">
                                     <table class="table table-sm">
                                         <thead class="table-academic">
@@ -394,71 +366,76 @@ include __DIR__ . '/side_bar_profesor.php';
                                                 <th>Presentes</th>
                                                 <th>Tardanzas</th>
                                                 <th>Ausencias</th>
-                                                <th>Justificadas</th>
                                                 <th>% Asistencia</th>
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            <tr>
-                                                <td>Alejandro Gómez</td>
-                                                <td>13</td>
-                                                <td>1</td>
-                                                <td>1</td>
-                                                <td>0</td>
-                                                <td>93%</td>
-                                            </tr>
-                                            <tr>
-                                                <td>Carla Mendoza</td>
-                                                <td>15</td>
-                                                <td>0</td>
-                                                <td>0</td>
-                                                <td>0</td>
-                                                <td>100%</td>
-                                            </tr>
-                                            <tr>
-                                                <td>Daniel Flores</td>
-                                                <td>11</td>
-                                                <td>3</td>
-                                                <td>1</td>
-                                                <td>0</td>
-                                                <td>87%</td>
-                                            </tr>
-                                            <tr>
-                                                <td>Elena Vargas</td>
-                                                <td>15</td>
-                                                <td>0</td>
-                                                <td>0</td>
-                                                <td>0</td>
-                                                <td>100%</td>
-                                            </tr>
-                                            <tr>
-                                                <td>Fernando Quispe</td>
-                                                <td>9</td>
-                                                <td>1</td>
-                                                <td>5</td>
-                                                <td>0</td>
-                                                <td>73%</td>
-                                            </tr>
-                                            <tr class="table-academic">
-                                                <td><strong>Promedio</strong></td>
-                                                <td><strong>12.6</strong></td>
-                                                <td><strong>1.0</strong></td>
-                                                <td><strong>1.4</strong></td>
-                                                <td><strong>0.0</strong></td>
-                                                <td><strong>91%</strong></td>
-                                            </tr>
+                                            <?php while ($row = $result_estad->fetch_assoc()): 
+                                                $porcentaje = $row['total_dias'] > 0 
+                                                    ? round(($row['presentes'] + $row['tardanzas'] * 0.5) / $row['total_dias'] * 100, 0)
+                                                    : 0;
+                                                $sum_porcentaje += $porcentaje;
+                                                $total_est++;
+                                            ?>
+                                                <tr>
+                                                    <td><?php echo htmlspecialchars($row['estudiante']); ?></td>
+                                                    <td><?php echo $row['presentes']; ?></td>
+                                                    <td><?php echo $row['tardanzas']; ?></td>
+                                                    <td><?php echo $row['ausencias']; ?></td>
+                                                    <td><?php echo $porcentaje . '%'; ?></td>
+                                                </tr>
+                                            <?php endwhile; ?>
+                                            <?php if ($total_est > 0): ?>
+                                                <tr class="table-academic">
+                                                    <td><strong>Promedio</strong></td>
+                                                    <td colspan="3"></td>
+                                                    <td><strong><?php echo round($sum_porcentaje / $total_est, 0) . '%'; ?></strong></td>
+                                                </tr>
+                                            <?php else: ?>
+                                                <tr><td colspan="5" class="text-center">No hay registros de asistencia</td></tr>
+                                            <?php endif; ?>
                                         </tbody>
                                     </table>
                                 </div>
                             </div>
                         </div>
                     </div>
+
+                    <!-- Tabla de estudiantes con problemas -->
                     <div class="col-md-6">
                         <div class="card h-100">
                             <div class="card-header card-header-academic">
                                 <h5 class="mb-0 text-white">Estudiantes con Problemas de Asistencia</h5>
                             </div>
                             <div class="card-body">
+                                <?php
+                                // Reutilizamos la misma consulta pero detectamos los problemáticos (<80%)
+                                $stmt_problemas = $mysqli->prepare("
+                                    SELECT 
+                                        CONCAT(u.apellido, ', ', u.nombre) AS estudiante,
+                                        c.nombre AS curso,
+                                        g.nombre AS grado,
+                                        SUM(a.estado = 'Presente') AS presentes,
+                                        SUM(a.estado = 'Tarde') AS tardanzas,
+                                        SUM(a.estado = 'Ausente') AS ausencias,
+                                        COUNT(a.id) AS total_dias
+                                    FROM asistencia a
+                                    JOIN matriculas m ON a.matricula_id = m.id
+                                    JOIN estudiantes e ON m.estudiante_id = e.id
+                                    JOIN usuarios u ON e.usuario_id = u.id
+                                    JOIN cursos c ON m.curso_id = c.id
+                                    JOIN grados g ON c.grado_id = g.id
+                                    WHERE c.profesor_id = ?
+                                    GROUP BY e.id, c.id
+                                    HAVING COUNT(a.id) > 0
+                                    AND ((SUM(a.estado = 'Presente') + SUM(a.estado = 'Tarde') * 0.5) / COUNT(a.id) * 100) < 80
+                                    ORDER BY ((SUM(a.estado = 'Presente') + SUM(a.estado = 'Tarde') * 0.5) / COUNT(a.id) * 100) ASC
+                                ");
+                                $stmt_problemas->bind_param('i', $profesor_id);
+                                $stmt_problemas->execute();
+                                $result_problemas = $stmt_problemas->get_result();
+                                $stmt_problemas->close();
+                                ?>
                                 <div class="table-responsive">
                                     <table class="table table-sm">
                                         <thead class="table-academic">
@@ -471,36 +448,27 @@ include __DIR__ . '/side_bar_profesor.php';
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            <tr>
-                                                <td>Fernando Quispe</td>
-                                                <td>Matemáticas - 6° Secundaria</td>
-                                                <td>73%</td>
-                                                <td>Ausencias frecuentes sin justificación</td>
-                                                <td>
-                                                    <button class="btn btn-sm btn-outline-warning"><i class="bi bi-chat-dots"></i></button>
-                                                    <button class="btn btn-sm btn-outline-info"><i class="bi bi-envelope"></i></button>
-                                                </td>
-                                            </tr>
-                                            <tr>
-                                                <td>Luis Mamani</td>
-                                                <td>Física - 5° Secundaria</td>
-                                                <td>68%</td>
-                                                <td>Ausencias frecuentes sin justificación</td>
-                                                <td>
-                                                    <button class="btn btn-sm btn-outline-warning"><i class="bi bi-chat-dots"></i></button>
-                                                    <button class="btn btn-sm btn-outline-info"><i class="bi bi-envelope"></i></button>
-                                                </td>
-                                            </tr>
-                                            <tr>
-                                                <td>Patricia Flores</td>
-                                                <td>Química - 6° Secundaria</td>
-                                                <td>75%</td>
-                                                <td>Tardanzas frecuentes</td>
-                                                <td>
-                                                    <button class="btn btn-sm btn-outline-warning"><i class="bi bi-chat-dots"></i></button>
-                                                    <button class="btn btn-sm btn-outline-info"><i class="bi bi-envelope"></i></button>
-                                                </td>
-                                            </tr>
+                                            <?php if ($result_problemas->num_rows > 0): ?>
+                                                <?php while ($row = $result_problemas->fetch_assoc()): 
+                                                    $porcentaje = round(($row['presentes'] + $row['tardanzas'] * 0.5) / $row['total_dias'] * 100, 0);
+                                                    $problema = $row['ausencias'] > ($row['total_dias'] * 0.2)
+                                                        ? 'Ausencias frecuentes'
+                                                        : 'Tardanzas recurrentes';
+                                                ?>
+                                                    <tr>
+                                                        <td><?php echo htmlspecialchars($row['estudiante']); ?></td>
+                                                        <td><?php echo htmlspecialchars($row['curso'] . ' - ' . $row['grado']); ?></td>
+                                                        <td><?php echo $porcentaje . '%'; ?></td>
+                                                        <td><?php echo $problema; ?></td>
+                                                        <td>
+                                                            <button class="btn btn-sm btn-outline-warning" title="Enviar mensaje"><i class="bi bi-chat-dots"></i></button>
+                                                            <button class="btn btn-sm btn-outline-info" title="Enviar correo"><i class="bi bi-envelope"></i></button>
+                                                        </td>
+                                                    </tr>
+                                                <?php endwhile; ?>
+                                            <?php else: ?>
+                                                <tr><td colspan="5" class="text-center">No se detectaron estudiantes con problemas de asistencia.</td></tr>
+                                            <?php endif; ?>
                                         </tbody>
                                     </table>
                                 </div>
@@ -510,6 +478,32 @@ include __DIR__ . '/side_bar_profesor.php';
                 </div>
 
                 <!-- Other Courses -->
+                <?php
+                $stmt_resumen = $mysqli->prepare("
+                    SELECT 
+                        c.id,
+                        c.nombre AS curso,
+                        g.nombre AS grado,
+                        COUNT(DISTINCT e.id) AS estudiantes,
+                        ROUND(AVG(
+                            CASE 
+                                WHEN a.estado = 'Presente' THEN 1
+                                WHEN a.estado = 'Tarde' THEN 0.5
+                                ELSE 0
+                            END
+                        ) * 100, 0) AS promedio_asistencia
+                    FROM cursos c
+                    JOIN grados g ON c.grado_id = g.id
+                    JOIN matriculas m ON c.id = m.curso_id
+                    JOIN estudiantes e ON m.estudiante_id = e.id
+                    LEFT JOIN asistencia a ON m.id = a.matricula_id
+                    WHERE c.profesor_id = ?
+                    GROUP BY c.id
+                ");
+                $stmt_resumen->bind_param('i', $profesor_id);
+                $stmt_resumen->execute();
+                $result_resumen = $stmt_resumen->get_result();
+                ?>
                 <div class="card mb-4">
                     <div class="card-header card-header-academic">
                         <h5 class="mb-0 text-white">Resumen de Asistencia por Cursos</h5>
@@ -523,76 +517,23 @@ include __DIR__ . '/side_bar_profesor.php';
                                         <th>Grado</th>
                                         <th>Estudiantes</th>
                                         <th>% Asistencia Promedio</th>
-                                        <th>Estudiantes con Problemas</th>
-                                        <th>Acciones</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr>
-                                        <td>Matemáticas</td>
-                                        <td>6° Secundaria</td>
-                                        <td>25</td>
-                                        <td>91%</td>
-                                        <td>1</td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary">Ver Detalles</button>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>Matemáticas</td>
-                                        <td>5° Secundaria</td>
-                                        <td>25</td>
-                                        <td>89%</td>
-                                        <td>2</td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary">Ver Detalles</button>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>Física</td>
-                                        <td>6° Secundaria</td>
-                                        <td>25</td>
-                                        <td>90%</td>
-                                        <td>0</td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary">Ver Detalles</button>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>Física</td>
-                                        <td>5° Secundaria</td>
-                                        <td>25</td>
-                                        <td>87%</td>
-                                        <td>1</td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary">Ver Detalles</button>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>Química</td>
-                                        <td>6° Secundaria</td>
-                                        <td>25</td>
-                                        <td>88%</td>
-                                        <td>1</td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary">Ver Detalles</button>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>Química</td>
-                                        <td>5° Secundaria</td>
-                                        <td>25</td>
-                                        <td>92%</td>
-                                        <td>0</td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary">Ver Detalles</button>
-                                        </td>
-                                    </tr>
+                                    <?php while ($row = $result_resumen->fetch_assoc()): ?>
+                                        <tr>
+                                            <td><?php echo htmlspecialchars($row['curso']); ?></td>
+                                            <td><?php echo htmlspecialchars($row['grado']); ?></td>
+                                            <td><?php echo $row['estudiantes']; ?></td>
+                                            <td><?php echo $row['promedio_asistencia'] . '%'; ?></td>
+                                        </tr>
+                                    <?php endwhile; ?>
                                 </tbody>
                             </table>
                         </div>
                     </div>
                 </div>
+
             </div>
         </div>
     </div>

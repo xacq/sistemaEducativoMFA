@@ -562,5 +562,74 @@ include __DIR__ . '/side_bar_profesor.php';
     <!-- Scripts -->
     <script src="../js/jquery-3.3.1.min.js"></script>
     <script src="../js/bootstrap.bundle.min.js"></script>
+
+    <script>
+    $(document).ready(function () {
+        // Interceptar el envío del formulario del modal
+        $('#newGradeModal form').on('submit', function (e) {
+            e.preventDefault(); // Evita el envío tradicional
+            const form = $(this);
+            const submitBtn = form.find('button[type="submit"]');
+            submitBtn.prop('disabled', true).text('Guardando...');
+
+            $.ajax({
+                url: form.attr('action'),
+                method: 'POST',
+                data: form.serialize(),
+                dataType: 'json',
+                success: function (res) {
+                    submitBtn.prop('disabled', false).text('Guardar y Continuar');
+
+                    // Cerrar el modal (Bootstrap 5)
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('newGradeModal'));
+                    modal.hide();
+
+                    // Crear el mensaje flotante
+                    const box = document.createElement('div');
+                    box.className = 'alert alert-info shadow position-fixed top-50 start-50 translate-middle text-center border border-primary';
+                    box.style.zIndex = 2000;
+                    box.style.minWidth = '420px';
+                    box.style.padding = '20px';
+                    box.innerHTML = `
+                        <h5 class="mb-2">${res.success ? '✅ ' : '⚠️ '}${res.message}</h5>
+                        ${res.success ? '<p>La evaluación se ha guardado correctamente.</p>' : '<p>Revisa los datos e inténtalo nuevamente.</p>'}
+                        <div class="mt-3">
+                            <button class="btn btn-primary btn-sm" onclick="this.closest('.alert').remove(); ${res.success ? 'location.reload();' : ''}">Cerrar</button>
+                        </div>
+                    `;
+                    document.body.appendChild(box);
+                },
+                error: function () {
+                    submitBtn.prop('disabled', false).text('Guardar y Continuar');
+                    const box = document.createElement('div');
+                    box.className = 'alert alert-danger shadow position-fixed top-50 start-50 translate-middle text-center border border-danger';
+                    box.style.zIndex = 2000;
+                    box.style.minWidth = '420px';
+                    box.style.padding = '20px';
+                    box.innerHTML = `
+                        <h5 class="mb-2">❌ Error al guardar la evaluación</h5>
+                        <p>Por favor, intenta nuevamente o revisa la conexión.</p>
+                        <div class="mt-3">
+                            <button class="btn btn-outline-light btn-sm" onclick="this.closest('.alert').remove();">Cerrar</button>
+                        </div>
+                    `;
+                    document.body.appendChild(box);
+                }
+            });
+        });
+    });
+    </script>
+
+    <style>
+    .alert.position-fixed {
+        animation: fadeIn .3s ease-out;
+    }
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translate(-50%, -40%); }
+        to { opacity: 1; transform: translate(-50%, -50%); }
+    }
+    </style>
+
+
 </body>
 </html>
