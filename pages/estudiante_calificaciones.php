@@ -42,7 +42,8 @@ $sql = "
         c.nombre AS curso_nombre,
         CONCAT(up.nombre, ' ', up.apellido) AS profesor,
         e.titulo AS tipo_evaluacion,
-        ca.calificacion AS calificacion
+        e.tipo_evaluacion AS categoria,
+        ca.calificacion
     FROM matriculas m
     JOIN cursos c ON m.curso_id = c.id
     JOIN profesores p ON c.profesor_id = p.id
@@ -58,7 +59,14 @@ UNION ALL
         c.nombre AS curso_nombre,
         CONCAT(up.nombre, ' ', up.apellido) AS profesor,
         CONCAT('Tarea: ', t.titulo) AS tipo_evaluacion,
-        ct.calificacion AS calificacion
+        CASE 
+            WHEN t.tipo = '0' THEN 'Parcial 1'
+            WHEN t.tipo = '1' THEN 'Parcial 2'
+            WHEN t.tipo = '2' THEN 'Proyecto'
+            WHEN t.tipo = '3' THEN 'Final'
+            ELSE 'Parcial 1'
+        END AS categoria,
+        ct.calificacion
     FROM matriculas m
     JOIN cursos c ON m.curso_id = c.id
     JOIN profesores p ON c.profesor_id = p.id
@@ -68,33 +76,56 @@ UNION ALL
     LEFT JOIN calificaciones_tareas ct ON ct.tarea_entrega_id = te.id
     WHERE m.estudiante_id = ?
 )
-ORDER BY curso_id, tipo_evaluacion
+ORDER BY curso_id, categoria
 ";
+
 
 $stmt = $mysqli->prepare($sql);
 $stmt->bind_param("ii", $estudianteId, $estudianteId);
 $stmt->execute();
 $result = $stmt->get_result();
 
+
 // 4️⃣ Reorganizar resultados por curso
 $cursos = [];
+
 while ($row = $result->fetch_assoc()) {
     $curso = $row['curso_nombre'];
+    $categoria = $row['categoria'] ?? 'Sin categoría'; // Parcial 1, Parcial 2, Proyecto, Final, etc.
+
     if (!isset($cursos[$curso])) {
         $cursos[$curso] = [
             'profesor' => $row['profesor'],
             'evaluaciones' => []
         ];
     }
-    $cursos[$curso]['evaluaciones'][$row['tipo_evaluacion']] = $row['calificacion'];
+
+    // Inicializamos la categoría si no existe
+    if (!isset($cursos[$curso]['evaluaciones'][$categoria])) {
+        $cursos[$curso]['evaluaciones'][$categoria] = [];
+    }
+
+    // Agregamos esta evaluación/tarea dentro de su categoría
+    $cursos[$curso]['evaluaciones'][$categoria][] = [
+        'nombre' => $row['tipo_evaluacion'],
+        'nota' => $row['calificacion']
+    ];
 }
 
 // 5️⃣ Calcular promedios y estado
 foreach ($cursos as $curso => &$data) {
-    $notas = array_filter($data['evaluaciones'], fn($v) => $v !== null);
+    $notas = [];
+    foreach ($data['evaluaciones'] as $categoriaNotas) {
+        foreach ($categoriaNotas as $eval) {
+            if (!is_null($eval['nota'])) {
+                $notas[] = $eval['nota'];
+            }
+        }
+    }
     $data['promedio'] = count($notas) ? round(array_sum($notas) / count($notas), 1) : 0;
     $data['estado'] = $data['promedio'] >= 70 ? 'Aprobado' : ($data['promedio'] > 0 ? 'Reprobado' : 'Sin calificaciones');
 }
+
 
 include __DIR__ . '/side_bar_estudiantes.php';
 ?>
@@ -109,6 +140,31 @@ include __DIR__ . '/side_bar_estudiantes.php';
     <link href="../css/academic.css" rel="stylesheet" type="text/css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css">
 </head>
+<style>
+    .table td ul {
+    margin: 0;
+    padding-left: 0.5rem;
+    }
+    .table td ul li {
+    margin-bottom: 2px;
+    font-size: 0.9rem;
+    }
+    .table td ul li i {
+    font-size: 0.8rem;
+    }
+    .notification-badge {
+    position: absolute;
+    top: 0;
+    right: 0;
+    transform: translate(50%, -50%);
+    background-color: red;
+    color: white;
+    border-radius: 50%;
+    padding: 0.25em 0.5em;
+    font-size: 0.75rem;
+    font-weight: bold;
+    }
+</style>
 <body>
 <div class="container-fluid">
     <div class="row">
@@ -153,7 +209,6 @@ include __DIR__ . '/side_bar_estudiantes.php';
                                         <th>Profesor</th>
                                         <th>Parcial 1</th>
                                         <th>Parcial 2</th>
-                                        <th>Tareas</th>
                                         <th>Proyecto</th>
                                         <th>Final</th>
                                         <th>Promedio</th>
@@ -171,14 +226,74 @@ include __DIR__ . '/side_bar_estudiantes.php';
                                         <tr>
                                             <td><?= htmlspecialchars($curso) ?></td>
                                             <td><?= htmlspecialchars($data['profesor']) ?></td>
-                                            <td colspan="5">
-                                                <?php foreach ($data['evaluaciones'] as $nombreEval => $nota): ?>
-                                                    <div><strong><?= htmlspecialchars($nombreEval) ?>:</strong> <?= $nota ?? '-' ?></div>
-                                                <?php endforeach; ?>
+                                            <td>
+                                                <?php if (!empty($data['evaluaciones']['Parcial 1'])): ?>
+                                                    <ul class="list-unstyled mb-0">
+                                                        <?php foreach ($data['evaluaciones']['Parcial 1'] as $eval): ?>
+                                                            <li>
+                                                                <i class="bi bi-check-circle text-primary me-1"></i>
+                                                                <strong><?= htmlspecialchars($eval['nombre']) ?>:</strong>
+                                                                <?= $eval['nota'] ?? '-' ?>
+                                                            </li>
+                                                        <?php endforeach; ?>
+                                                    </ul>
+                                                <?php else: ?>
+                                                    <span class="text-muted">-</span>
+                                                <?php endif; ?>
                                             </td>
+
+                                            <td>
+                                                <?php if (!empty($data['evaluaciones']['Parcial 2'])): ?>
+                                                    <ul class="list-unstyled mb-0">
+                                                        <?php foreach ($data['evaluaciones']['Parcial 2'] as $eval): ?>
+                                                            <li>
+                                                                <i class="bi bi-check-circle text-success me-1"></i>
+                                                                <strong><?= htmlspecialchars($eval['nombre']) ?>:</strong>
+                                                                <?= $eval['nota'] ?? '-' ?>
+                                                            </li>
+                                                        <?php endforeach; ?>
+                                                    </ul>
+                                                <?php else: ?>
+                                                    <span class="text-muted">-</span>
+                                                <?php endif; ?>
+                                            </td>
+
+                                            <td>
+                                                <?php if (!empty($data['evaluaciones']['Proyecto'])): ?>
+                                                    <ul class="list-unstyled mb-0">
+                                                        <?php foreach ($data['evaluaciones']['Proyecto'] as $eval): ?>
+                                                            <li>
+                                                                <i class="bi bi-lightbulb text-warning me-1"></i>
+                                                                <strong><?= htmlspecialchars($eval['nombre']) ?>:</strong>
+                                                                <?= $eval['nota'] ?? '-' ?>
+                                                            </li>
+                                                        <?php endforeach; ?>
+                                                    </ul>
+                                                <?php else: ?>
+                                                    <span class="text-muted">-</span>
+                                                <?php endif; ?>
+                                            </td>
+
+                                            <td>
+                                                <?php if (!empty($data['evaluaciones']['Final'])): ?>
+                                                    <ul class="list-unstyled mb-0">
+                                                        <?php foreach ($data['evaluaciones']['Final'] as $eval): ?>
+                                                            <li>
+                                                                <i class="bi bi-flag text-danger me-1"></i>
+                                                                <strong><?= htmlspecialchars($eval['nombre']) ?>:</strong>
+                                                                <?= $eval['nota'] ?? '-' ?>
+                                                            </li>
+                                                        <?php endforeach; ?>
+                                                    </ul>
+                                                <?php else: ?>
+                                                    <span class="text-muted">-</span>
+                                                <?php endif; ?>
+                                            </td>
+
                                             <td class="fw-bold"><?= $prom ?></td>
                                             <td><span class="badge <?= $badge ?>"><?= $estado ?></span></td>
                                         </tr>
+
                                     <?php endforeach; ?>
                                     <?php if (empty($cursos)): ?>
                                         <tr><td colspan="9" class="text-center text-muted">No hay calificaciones registradas.</td></tr>
