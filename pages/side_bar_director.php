@@ -65,7 +65,7 @@
         </a>
       </li>
       <li class="nav-item mt-5">
-        <a class="nav-link" href="./logout.php">
+        <a class="nav-link" href="../logout.php">
           <i class="bi bi-box-arrow-left me-2"></i> Cerrar Sesión
         </a>
       </li>
