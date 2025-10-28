@@ -66,7 +66,11 @@ $sql_tareas = "
         g.nombre AS grado_nombre,
         (SELECT COUNT(*) FROM matriculas WHERE curso_id = c.id) AS total_estudiantes,
         (SELECT COUNT(*) FROM tarea_entregas te WHERE te.tarea_id = t.id) AS total_entregas,
-        (SELECT COUNT(*) FROM calificaciones cal JOIN tarea_entregas te ON cal.id = te.id WHERE te.tarea_id = t.id) AS total_calificadas
+        (SELECT COUNT(*) 
+        FROM calificaciones_tareas ct 
+        JOIN tarea_entregas te ON ct.tarea_entrega_id = te.id 
+        WHERE te.tarea_id = t.id
+        ) AS total_calificadas
     FROM tareas t
     JOIN cursos c ON t.curso_id = c.id
     JOIN grados g ON c.grado_id = g.id
@@ -101,7 +105,7 @@ $sql_pendientes = "
     JOIN estudiantes e ON m.estudiante_id = e.id
     JOIN usuarios u ON e.usuario_id = u.id
     WHERE c.profesor_id = ? 
-      AND NOT EXISTS (SELECT 1 FROM calificaciones cal WHERE cal.id = te.id) -- Si no existe en calificaciones
+      AND NOT EXISTS (SELECT 1 FROM calificaciones_tareas ct WHERE ct.tarea_entrega_id = te.id)
     ORDER BY te.fecha_envio ASC
 ";
 
@@ -1147,7 +1151,7 @@ include __DIR__ . '/side_bar_profesor.php';
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="button" class="btn btn-academic">Guardar Calificación</button>
+                    <button type="button" id="btnGuardarCalificacion" class="btn btn-academic">Guardar Calificación</button>
                 </div>
             </div>
         </div>
@@ -1247,6 +1251,49 @@ include __DIR__ . '/side_bar_profesor.php';
                 }
             });
         });
+    });
+    
+    // Guardar calificación de tarea
+    $('#btnGuardarCalificacion').on('click', function () {
+        const entregaId = $('#gradeAssignmentModal').data('entrega-id') || 0;
+        const calificacion = $('#gradeValue').val();
+        const comentario = $('#gradeComments').val();
+
+        if (!entregaId) {
+        Swal.fire({icon:'error', title:'Falta el ID de entrega', text:'Vuelve a abrir el modal desde el botón Calificar.'});
+        return;
+        }
+
+        $.post('guardar_calificacion_tarea.php', {
+        tarea_entrega_id: entregaId,
+        calificacion,
+        comentario
+        }, function (resp) {
+        // éxito con JSON válido
+        Swal.fire({
+            icon: resp.success ? 'success' : 'error',
+            title: resp.message,
+            timer: 1800,
+            showConfirmButton: false
+        }).then(() => {
+            if (resp.success) location.reload();
+        });
+        }, 'json')
+        .fail(function (xhr) {
+        // fallo de red o el PHP no devolvió JSON válido
+        console.error('Respuesta del servidor:', xhr.responseText);
+        Swal.fire({
+            icon:'error',
+            title:'No se pudo guardar',
+            text:'Revisa la consola (F12 → Console) y Network. Puede ser 404 o un warning en PHP.'
+        });
+        });
+    });
+    // Copia el data-entrega-id del botón al modal cuando se abre
+    $('#gradeAssignmentModal').on('show.bs.modal', function (e) {
+    const trigger = $(e.relatedTarget); // botón que abrió el modal
+    const entregaId = trigger.data('entrega-id');
+    $(this).data('entrega-id', entregaId);
     });
     </script>
 

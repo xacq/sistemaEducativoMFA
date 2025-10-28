@@ -145,104 +145,103 @@ function student_calculate_average_grade(mysqli $mysqli, ?int $estudianteId): ?f
  *
  * @return array{all: list<array<string,mixed>>, pending: list<array<string,mixed>>, submitted: list<array<string,mixed>>, graded: list<array<string,mixed>>}
  */
-function student_fetch_tasks_with_status(mysqli $mysqli, ?int $estudianteId): array
-{
-    $buckets = [
-        'all' => [],
-        'pending' => [],
-        'submitted' => [],
-        'graded' => [],
-    ];
+function student_fetch_tasks_with_status(mysqli $mysqli, int $estudianteId): array {
+    // Toma todas las tareas de las matrículas activas del estudiante
+    // y calcula estado: pendiente / entregada / calificada,
+    // además de incluir detalles de la calificación si existen.
 
-    if (!$estudianteId) {
-        return $buckets;
-    }
+    // OJO: ajusta los nombres de tus tablas/joins si en tu esquema real difieren:
+    //  - tareas t (id, titulo, descripcion, fecha_limite, curso_id, ...)
+    //  - cursos c (id, nombre)
+    //  - matriculas m (id, estudiante_id, curso_id)
+    //  - tarea_entregas te (id, tarea_id, matricula_id, comentario, file_path, fecha_envio)
+    //  - calificaciones_tareas ct (id, tarea_entrega_id, profesor_id, calificacion, comentario, fecha_calificacion)
+    //  - profesores p JOIN usuarios u (para nombre del profesor)
 
-    $sql = "SELECT t.id, t.titulo, t.descripcion, t.fecha_asignacion, t.fecha_entrega,
-                   c.nombre AS curso_nombre,
-                   m.id AS matricula_id,
-                   te.id AS entrega_id, te.fecha_envio, te.file_path, te.comentario,
-                   (SELECT cal.calificacion
-                      FROM calificaciones cal
-                      INNER JOIN evaluaciones ev ON ev.id = cal.evaluacion_id
-                     WHERE cal.matricula_id = m.id
-                       AND ev.curso_id = t.curso_id
-                       AND ev.titulo = t.titulo
-                     ORDER BY cal.fecha DESC, cal.id DESC
-                     LIMIT 1) AS calificacion,
-                   (SELECT cal.fecha
-                      FROM calificaciones cal
-                      INNER JOIN evaluaciones ev ON ev.id = cal.evaluacion_id
-                     WHERE cal.matricula_id = m.id
-                       AND ev.curso_id = t.curso_id
-                       AND ev.titulo = t.titulo
-                     ORDER BY cal.fecha DESC, cal.id DESC
-                     LIMIT 1) AS fecha_calificacion,
-                   (SELECT cal.comentario
-                      FROM calificaciones cal
-                      INNER JOIN evaluaciones ev ON ev.id = cal.evaluacion_id
-                     WHERE cal.matricula_id = m.id
-                       AND ev.curso_id = t.curso_id
-                       AND ev.titulo = t.titulo
-                     ORDER BY cal.fecha DESC, cal.id DESC
-                     LIMIT 1) AS retroalimentacion
-            FROM tareas t
-            INNER JOIN matriculas m ON m.curso_id = t.curso_id AND m.estudiante_id = ?
-            INNER JOIN cursos c ON c.id = t.curso_id
-            LEFT JOIN tarea_entregas te ON te.tarea_id = t.id AND te.matricula_id = m.id
-            ORDER BY t.fecha_entrega ASC, t.id ASC";
+    $sql = "
+        SELECT
+            t.id AS tarea_id,
+            t.titulo AS tarea_titulo,
+            t.descripcion AS tarea_descripcion,
+            t.fecha_limite,
+            c.nombre AS curso_nombre,
 
-    if ($stmt = $mysqli->prepare($sql)) {
-        $stmt->bind_param('i', $estudianteId);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        $today = new DateTimeImmutable('today');
+            te.id AS entrega_id,
+            te.file_path,
+            te.fecha_envio,
+            te.comentario AS entrega_comentario,
 
-        while ($row = $result->fetch_assoc()) {
-            $task = [
-                'id' => (int) $row['id'],
-                'titulo' => $row['titulo'] ?? '',
-                'descripcion' => $row['descripcion'] ?? '',
-                'fecha_asignacion' => $row['fecha_asignacion'] ?? null,
-                'fecha_entrega' => $row['fecha_entrega'] ?? null,
-                'curso_nombre' => $row['curso_nombre'] ?? '',
-                'matricula_id' => (int) $row['matricula_id'],
-                'entrega_id' => $row['entrega_id'] !== null ? (int) $row['entrega_id'] : null,
-                'fecha_envio' => $row['fecha_envio'],
-                'file_path' => $row['file_path'] ?? '',
-                'comentario' => $row['comentario'] ?? '',
-                'calificacion' => $row['calificacion'] !== null ? (float) $row['calificacion'] : null,
-                'fecha_calificacion' => $row['fecha_calificacion'] ?? null,
-                'retroalimentacion' => $row['retroalimentacion'] ?? null,
-                'status' => 'pending',
-                'status_label' => 'Pendiente',
-                'status_badge' => 'bg-info',
-            ];
+            ct.id AS calif_id,
+            ct.calificacion,
+            ct.comentario AS calif_comentario,
+            ct.fecha_calificacion,
 
-            $dueDate = !empty($task['fecha_entrega']) ? DateTimeImmutable::createFromFormat('Y-m-d', $task['fecha_entrega']) : null;
+            CONCAT(u.nombre, ' ', u.apellido) AS profesor_nombre
+        FROM tareas t
+        INNER JOIN cursos c            ON c.id = t.curso_id
+        INNER JOIN matriculas m        ON m.curso_id = c.id
+        LEFT JOIN tarea_entregas te    ON te.tarea_id = t.id AND te.matricula_id = m.id
+        LEFT JOIN calificaciones_tareas ct ON ct.tarea_entrega_id = te.id
+        LEFT JOIN profesores p         ON p.id = ct.profesor_id
+        LEFT JOIN usuarios u           ON u.id = p.usuario_id
+        WHERE m.estudiante_id = ?
+        ORDER BY t.fecha_limite IS NULL, t.fecha_limite ASC, t.id DESC
+    ";
 
-            if ($task['entrega_id']) {
-                $task['status'] = 'submitted';
-                $task['status_label'] = 'Entregada';
-                $task['status_badge'] = 'bg-primary';
-                if ($task['calificacion'] !== null) {
-                    $task['status'] = 'graded';
-                    $task['status_label'] = 'Calificada';
-                    $task['status_badge'] = 'bg-success';
-                }
-            } elseif ($dueDate && $dueDate < $today) {
-                $task['status_badge'] = 'bg-danger';
-                $task['status_label'] = 'Atrasada';
-            }
+    $stmt = $mysqli->prepare($sql);
+    $stmt->bind_param('i', $estudianteId);
+    $stmt->execute();
+    $res = $stmt->get_result();
 
-            $buckets['all'][] = $task;
-            $buckets[$task['status']][] = $task;
+    $all = [];
+    while ($row = $res->fetch_assoc()) {
+        // Estado:
+        // - calificada: si existe ct.id
+        // - entregada (no calificada): si existe te.id y NO ct.id
+        // - pendiente: si NO existe te.id
+        $estado = 'pendiente';
+        if (!empty($row['entrega_id'])) {
+            $estado = 'entregada';
         }
-        $stmt->close();
-    }
+        if (!empty($row['calif_id'])) {
+            $estado = 'calificada';
+        }
 
-    return $buckets;
+        $all[] = [
+            'tarea_id'           => (int)$row['tarea_id'],
+            'titulo'             => $row['tarea_titulo'],
+            'descripcion'        => $row['tarea_descripcion'],
+            'fecha_limite'       => $row['fecha_limite'],
+            'curso_nombre'       => $row['curso_nombre'],
+            'estado'             => $estado,
+
+            'entrega_id'         => $row['entrega_id'] ? (int)$row['entrega_id'] : null,
+            'file_path'          => $row['file_path'],
+            'fecha_envio'        => $row['fecha_envio'],
+            'entrega_comentario' => $row['entrega_comentario'],
+
+            'calif_id'           => $row['calif_id'] ? (int)$row['calif_id'] : null,
+            'calificacion'       => $row['calificacion'],
+            'calif_comentario'   => $row['calif_comentario'],
+            'fecha_calificacion' => $row['fecha_calificacion'],
+            'profesor_nombre'    => $row['profesor_nombre'],
+        ];
+    }
+    $stmt->close();
+
+    // Buckets para tus pestañas
+    $pending   = array_values(array_filter($all, fn($x) => $x['estado'] === 'pendiente'));
+    $submitted = array_values(array_filter($all, fn($x) => $x['estado'] === 'entregada'));
+    $graded    = array_values(array_filter($all, fn($x) => $x['estado'] === 'calificada'));
+
+    return [
+        'all'       => $all,
+        'pending'   => $pending,
+        'submitted' => $submitted,
+        'graded'    => $graded,
+    ];
 }
+
 
 /**
  * Obtiene el identificador de la matrícula asociada a una tarea para el estudiante dado.

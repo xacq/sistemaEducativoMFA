@@ -34,14 +34,15 @@ $stmt->bind_result($nombre, $apellido);
 $stmt->fetch();
 $stmt->close();
 
-// 3️⃣ Consultar calificaciones del estudiante
+// 3️⃣ Consultar calificaciones del estudiante (unifica evaluaciones y tareas)
 $sql = "
+(
     SELECT 
         c.id AS curso_id,
         c.nombre AS curso_nombre,
         CONCAT(up.nombre, ' ', up.apellido) AS profesor,
-        CONCAT(e.tipo_evaluacion, ' - ', e.titulo) AS tipo_evaluacion,
-        ca.calificacion
+        e.titulo AS tipo_evaluacion,
+        ca.calificacion AS calificacion
     FROM matriculas m
     JOIN cursos c ON m.curso_id = c.id
     JOIN profesores p ON c.profesor_id = p.id
@@ -49,11 +50,29 @@ $sql = "
     LEFT JOIN calificaciones ca ON ca.matricula_id = m.id
     LEFT JOIN evaluaciones e ON ca.evaluacion_id = e.id
     WHERE m.estudiante_id = ?
-    ORDER BY c.id, e.id
+)
+UNION ALL
+(
+    SELECT 
+        c.id AS curso_id,
+        c.nombre AS curso_nombre,
+        CONCAT(up.nombre, ' ', up.apellido) AS profesor,
+        CONCAT('Tarea: ', t.titulo) AS tipo_evaluacion,
+        ct.calificacion AS calificacion
+    FROM matriculas m
+    JOIN cursos c ON m.curso_id = c.id
+    JOIN profesores p ON c.profesor_id = p.id
+    JOIN usuarios up ON p.usuario_id = up.id
+    JOIN tareas t ON c.id = t.curso_id
+    JOIN tarea_entregas te ON te.tarea_id = t.id AND te.matricula_id = m.id
+    LEFT JOIN calificaciones_tareas ct ON ct.tarea_entrega_id = te.id
+    WHERE m.estudiante_id = ?
+)
+ORDER BY curso_id, tipo_evaluacion
 ";
 
 $stmt = $mysqli->prepare($sql);
-$stmt->bind_param("i", $estudianteId);
+$stmt->bind_param("ii", $estudianteId, $estudianteId);
 $stmt->execute();
 $result = $stmt->get_result();
 
@@ -152,11 +171,11 @@ include __DIR__ . '/side_bar_estudiantes.php';
                                         <tr>
                                             <td><?= htmlspecialchars($curso) ?></td>
                                             <td><?= htmlspecialchars($data['profesor']) ?></td>
-                                            <td><?= $data['evaluaciones']['Parcial 1'] ?? '-' ?></td>
-                                            <td><?= $data['evaluaciones']['Parcial 2'] ?? '-' ?></td>
-                                            <td><?= $data['evaluaciones']['Tareas'] ?? '-' ?></td>
-                                            <td><?= $data['evaluaciones']['Proyecto'] ?? '-' ?></td>
-                                            <td><?= $data['evaluaciones']['Final'] ?? '-' ?></td>
+                                            <td colspan="5">
+                                                <?php foreach ($data['evaluaciones'] as $nombreEval => $nota): ?>
+                                                    <div><strong><?= htmlspecialchars($nombreEval) ?>:</strong> <?= $nota ?? '-' ?></div>
+                                                <?php endforeach; ?>
+                                            </td>
                                             <td class="fw-bold"><?= $prom ?></td>
                                             <td><span class="badge <?= $badge ?>"><?= $estado ?></span></td>
                                         </tr>

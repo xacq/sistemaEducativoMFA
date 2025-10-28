@@ -269,6 +269,30 @@ include __DIR__ . '/side_bar_estudiantes.php';
             </div>
         </div>
     </div>
+    <!-- Modal detalle de calificación -->
+    <div class="modal fade" id="gradeModal" tabindex="-1" aria-labelledby="gradeModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+        <div class="modal-header bg-success text-white">
+            <h5 class="modal-title" id="gradeModalLabel">Detalle de calificación</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body">
+            <div class="mb-2"><strong>Tarea:</strong> <span id="gmTitulo"></span></div>
+            <div class="mb-2"><strong>Curso:</strong> <span id="gmCurso"></span></div>
+            <div class="mb-2"><strong>Calificación:</strong> <span id="gmCalificacion"></span></div>
+            <div class="mb-2"><strong>Profesor:</strong> <span id="gmProfesor"></span></div>
+            <div class="mb-2"><strong>Fecha:</strong> <span id="gmFecha"></span></div>
+            <div class="mb-2"><strong>Comentario:</strong><br><span id="gmComentario"></span></div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+        </div>
+        </div>
+    </div>
+    </div>
+
+
 
     <script src="../js/jquery-3.3.1.min.js"></script>
     <script src="../js/popper.min.js"></script>
@@ -287,6 +311,18 @@ include __DIR__ . '/side_bar_estudiantes.php';
             const modal = new bootstrap.Modal(document.getElementById('taskModal'));
             modal.show();
         }
+
+    // Rellena el modal de calificación
+    const gradeModal = document.getElementById('gradeModal');
+    gradeModal.addEventListener('show.bs.modal', function (event) {
+        const btn = event.relatedTarget;
+        document.getElementById('gmTitulo').textContent = btn.getAttribute('data-titulo') || '';
+        document.getElementById('gmCurso').textContent = btn.getAttribute('data-curso') || '';
+        document.getElementById('gmCalificacion').textContent = btn.getAttribute('data-calificacion') || '—';
+        document.getElementById('gmProfesor').textContent = btn.getAttribute('data-profesor') || '—';
+        document.getElementById('gmFecha').textContent = btn.getAttribute('data-fecha') || '—';
+        document.getElementById('gmComentario').textContent = btn.getAttribute('data-comentario') || '—';
+    });
     </script>
 </body>
 </html>
