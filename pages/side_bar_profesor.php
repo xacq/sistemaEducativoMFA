@@ -51,6 +51,13 @@
                             </a>
                         </li>
                         <li class="nav-item">
+                            <a class="nav-link" href="profesor_dashboard_informes.php">
+                                <i class="bi bi-file-earmark-text me-2"></i>
+                                Informe Psicopedagógico
+                            </a>
+                        </li>
+
+                        <li class="nav-item">
                             <a class="nav-link" href="profesor_perfil.php">
                                 <i class="bi bi-person-circle me-2"></i>
                                 Mi Perfil

@@ -55,9 +55,9 @@
         </a>
       </li>
       <li class="nav-item">
-        <a class="nav-link" href="./director_reportes.php">
-          <i class="bi bi-file-earmark-bar-graph me-2"></i> Reportes
-        </a>
+          <a class="nav-link" href="director_dashboard_informes.php">
+              <i class="bi bi-file-earmark-bar-graph me-2"></i> Informe Psicopedagógico
+          </a>
       </li>
       <li class="nav-item">
         <a class="nav-link" href="./director_configuracion.php">

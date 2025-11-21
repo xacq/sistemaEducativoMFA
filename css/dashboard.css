@@ -1,0 +1,152 @@
+/* ============================================================
+   DASHBOARD PSICOPEDAGÓGICO
+   Estilo limpio, moderno, ligero.
+   ============================================================ */
+
+/* Reset básico */
+body {
+    margin: 20px;
+    font-family: "Segoe UI", Arial, sans-serif;
+    background: #f7f7f7;
+    color: #333;
+}
+
+/* Títulos */
+h2 {
+    margin-bottom: 20px;
+    color: #2c3e50;
+    font-size: 26px;
+}
+
+h3 {
+    margin-top: 20px;
+    margin-bottom: 10px;
+    color: #34495e;
+    font-size: 20px;
+}
+
+h4 {
+    margin: 10px 0;
+    color: #2c3e50;
+}
+
+/* Contenedores principales */
+.dashboard-wrapper {
+    display: flex;
+    gap: 20px;
+    width: 100%;
+}
+
+/* Panel izquierdo */
+.dashboard-left {
+    width: 30%;
+    background: #ffffff;
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+}
+
+/* Panel derecho */
+.dashboard-right {
+    width: 70%;
+    background: #ffffff;
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    min-height: 400px;
+}
+
+/* Selects */
+select {
+    width: 100%;
+    padding: 10px;
+    border-radius: 6px;
+    border: 1px solid #bbb;
+    margin-bottom: 15px;
+    background: #fff;
+    font-size: 14px;
+}
+
+/* Botones */
+button, .btn_informe_estudiante {
+    background: #3498db;
+    border: none;
+    color: white;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: 0.2s ease;
+}
+
+button:hover, .btn_informe_estudiante:hover {
+    background: #2980b9;
+}
+
+/* Tabla de estudiantes */
+#tabla_estudiantes table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+}
+
+#tabla_estudiantes th, 
+#tabla_estudiantes td {
+    padding: 10px;
+    border: 1px solid #ddd;
+    text-align: left;
+}
+
+#tabla_estudiantes th {
+    background: #ecf0f1;
+    font-weight: bold;
+}
+
+/* Panel donde aparece el informe */
+#panel_informe {
+    background: #fafafa;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    padding: 20px;
+    line-height: 1.6;
+}
+
+/* Texto del informe */
+#panel_informe p {
+    margin-bottom: 10px;
+}
+
+#panel_informe strong {
+    color: #2c3e50;
+}
+
+/* Mensajes de estado */
+.info-message {
+    background: #dff9fb;
+    padding: 10px;
+    border-left: 5px solid #2980b9;
+    margin-bottom: 10px;
+}
+
+.error-message {
+    background: #ffcccc;
+    padding: 10px;
+    border-left: 5px solid #c0392b;
+    margin-bottom: 10px;
+}
+
+/* Nivel de riesgo */
+.riesgo-bajo {
+    color: #27ae60;
+    font-weight: bold;
+}
+
+.riesgo-medio {
+    color: #f39c12;
+    font-weight: bold;
+}
+
+.riesgo-alto {
+    color: #c0392b;
+    font-weight: bold;
+}
