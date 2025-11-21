@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Servidor: 127.0.0.1
--- Tiempo de generación: 28-10-2025 a las 21:26:22
+-- Tiempo de generación: 21-11-2025 a las 22:43:04
 -- Versión del servidor: 10.4.32-MariaDB
 -- Versión de PHP: 8.1.25
 
@@ -8451,7 +8451,8 @@ INSERT INTO `asistencia` (`id`, `matricula_id`, `fecha`, `estado`, `observacione
 (8402, 166, '2025-05-15', 'Presente', NULL),
 (8403, 166, '2025-05-14', 'Presente', NULL),
 (8404, 166, '2025-05-13', 'Presente', NULL),
-(8405, 383, '2025-10-28', 'Presente', '');
+(8405, 383, '2025-10-28', 'Presente', ''),
+(8407, 383, '2025-10-31', 'Presente', '');
 
 -- --------------------------------------------------------
 
@@ -10014,6 +10015,58 @@ INSERT INTO `horarios` (`id`, `curso_id`, `dia`, `hora_inicio`, `hora_fin`, `aul
 -- --------------------------------------------------------
 
 --
+-- Estructura de tabla para la tabla `informes_docentes`
+--
+
+CREATE TABLE `informes_docentes` (
+  `id` int(11) NOT NULL,
+  `profesor_id` int(11) NOT NULL,
+  `generado_por_usuario_id` int(11) NOT NULL,
+  `modelo_ia` varchar(100) NOT NULL,
+  `resumen_json` longtext NOT NULL,
+  `informe_texto` longtext NOT NULL,
+  `nivel_riesgo` enum('Bajo','Medio','Alto') DEFAULT 'Bajo',
+  `fecha_generacion` datetime NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Estructura de tabla para la tabla `informes_estudiantes`
+--
+
+CREATE TABLE `informes_estudiantes` (
+  `id` int(11) NOT NULL,
+  `estudiante_id` int(11) NOT NULL,
+  `curso_id` int(11) NOT NULL,
+  `generado_por_usuario_id` int(11) NOT NULL,
+  `modelo_ia` varchar(100) NOT NULL,
+  `resumen_json` longtext NOT NULL,
+  `informe_texto` longtext NOT NULL,
+  `nivel_riesgo` enum('Bajo','Medio','Alto') DEFAULT 'Bajo',
+  `fecha_generacion` datetime NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Estructura de tabla para la tabla `informes_ia_logs`
+--
+
+CREATE TABLE `informes_ia_logs` (
+  `id` int(11) NOT NULL,
+  `usuario_id` int(11) NOT NULL,
+  `tipo` enum('estudiante','docente') NOT NULL,
+  `referencia_id` int(11) NOT NULL,
+  `modelo_ia` varchar(100) NOT NULL,
+  `prompt_enviado` longtext NOT NULL,
+  `respuesta_cruda` longtext NOT NULL,
+  `fecha` datetime NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Estructura de tabla para la tabla `materiales`
 --
 
@@ -10746,7 +10799,8 @@ CREATE TABLE `tareas` (
 --
 
 INSERT INTO `tareas` (`id`, `curso_id`, `titulo`, `descripcion`, `instrucciones`, `recursos`, `puntaje_maximo`, `tipo_entrega`, `notificar_estudiantes`, `tipo`, `ponderacion`, `fecha_asignacion`, `fecha_entrega`, `fecha_creacion`, `fecha_limite`) VALUES
-(1, 26, 'Tarea 1', 'Tarea 1', 'Hacer la tarea', 'No existen', 100, 'Archivo', 1, '0', 20, '2025-10-28', '2025-10-29', '2025-10-28 09:05:06', NULL);
+(1, 26, 'Tarea 1', 'Tarea 1', 'Hacer la tarea', 'No existen', 100, 'Archivo', 1, '0', 20, '2025-10-28', '2025-10-29', '2025-10-28 09:05:06', NULL),
+(2, 26, 'Tarea2', 'Hacer la tarea', 'Intrucciones dadas en clase', 'Libro de practica físico', 100, 'Texto en línea', 1, '0', 25, '2025-10-31', '2025-11-04', '2025-10-31 17:00:49', NULL);
 
 -- --------------------------------------------------------
 
@@ -11063,7 +11117,7 @@ INSERT INTO `usuarios` (`id`, `nombre`, `apellido`, `email`, `password`, `mfa_co
 (257, 'Julieta', 'Morales', 'jmorales48@colegio.edu.bo', '$2y$10$LcWUv96evVsMOp8FjLqwYeAQBL8GLI7HJuRRWOF0ZPxRlp3NUw7kO', NULL, NULL, NULL, NULL, 2, '2025-06-11 10:58:47'),
 (258, 'Nicolás', 'Torres', 'ntorres49@colegio.edu.bo', '$2y$10$vZ3KIYfNDe/yyM1G/6vQ1uulutNpC/moAXbuuunpLdFMP3Q/RqElq', NULL, NULL, NULL, NULL, 2, '2025-06-11 10:58:47'),
 (259, 'Carlos', 'Rojas', 'crojas50@colegio.edu.bo', '$2y$10$RR5vFqzuHQhQzAah20Wkx.xJxXVqYXaeFjZVo3THgfkvLL8v1.bhu', NULL, NULL, NULL, NULL, 2, '2025-06-11 10:58:47'),
-(260, 'Nicole', 'Calvas', 'ncwork.350@outlook.com', '$2y$10$T4lWM2NPMWpImSNnuWlnUOnMADLieMCwLgSSPFolJMIS5JxiEUYOS', '717766', '2025-10-28 13:56:45', 'aa46c547c322952f6f4440ac8ef23f0db8333fe83ab493ffcb6c7bab1ac13c52', '2025-10-09 12:10:30', 1, '2025-10-08 15:49:22'),
+(260, 'Nicole', 'Calvas', 'ncwork.350@outlook.com', '$2y$10$T4lWM2NPMWpImSNnuWlnUOnMADLieMCwLgSSPFolJMIS5JxiEUYOS', '646497', '2025-11-12 15:40:06', 'aa46c547c322952f6f4440ac8ef23f0db8333fe83ab493ffcb6c7bab1ac13c52', '2025-10-09 12:10:30', 1, '2025-10-08 15:49:22'),
 (261, 'Andrea', 'Azuay', 'adreaazuay345@gmail.com', '$2y$10$qsNpdpuFCpYdYQZ1.EdZy.AJZARw41RKZXq8PyMVBe9P9LwQvTHQ6', '695754', '2025-10-10 23:23:47', '09dba31665ff276abd3eb73f7908504acc27a72bddc8315736b136254e0dcb8a', '2025-10-09 13:12:39', 3, '2025-10-09 13:11:36'),
 (262, 'sofia', 'cantos', 'sofia321@gmail.com', '$2y$10$W9OZOUIlLcv/3xgPeG6YPOrLZUOig1SjAZ7dZ07Lc79xNu6NPCFTa', '622084', '2025-10-10 23:49:24', '0992b031849d29e0336c432ccd5d5492b06176e1498161765075d70149710dda', '2025-10-10 17:38:47', 2, '2025-10-10 17:37:54'),
 (263, 'Ali', 'Eche', 'ali123@gmail.com', '$2y$10$unvIPA7i9.SrIsoM.2nDbu0AYhN/ErwNVBUp1V/qpfrRxgPVxFidi', NULL, NULL, '0849ca6e3c0370e63a4a03caff1afb85918a68cc34aff74245c56e1c0cb84830', NULL, 2, '2025-10-20 18:39:32'),
@@ -11073,9 +11127,9 @@ INSERT INTO `usuarios` (`id`, `nombre`, `apellido`, `email`, `password`, `mfa_co
 (267, 'Alonso', 'Pulla', 'ap123@gmail.com', '$2y$10$kh6Dg6MG3XhyTZt7WNE.0OWCeIYOjsVaJpc/szaXrgC7Zb4OW1DTW', '919821', '2025-10-22 04:50:11', NULL, '2025-10-21 22:40:03', 3, '2025-10-21 22:39:46'),
 (268, 'Maria', 'Maria', 'mari321@gmail.com', '$2y$10$Oxy4KrkUzu8N0j3VfYdvOuwMJzxAFCJ1M5b0qskBpn5/zhQM8.uoy', '873826', '2025-10-27 21:07:25', NULL, '2025-10-23 13:44:21', 2, '2025-10-23 13:44:08'),
 (269, 'Anahi', 'Anahi', 'anah123@gmail.com', '$2y$10$26sv7nUJ7uPXHUgd95z9t.I3dhuIgLSD7tWLbT70hVjXmwUFghQO6', '350765', '2025-10-27 20:45:43', NULL, '2025-10-23 13:51:31', 3, '2025-10-23 13:51:17'),
-(270, 'andres', 'alvarez', 'an123@gmail.com', '$2y$10$qVLrxgoS5CzjJepG0C3OIOIVeHv7VsJBRwHOxwITECLDZxaSPKQLW', '735857', '2025-10-28 14:46:41', NULL, '2025-10-28 08:09:29', 2, '2025-10-28 08:09:13'),
+(270, 'andres', 'alvarez', 'an123@gmail.com', '$2y$10$qVLrxgoS5CzjJepG0C3OIOIVeHv7VsJBRwHOxwITECLDZxaSPKQLW', '565735', '2025-11-21 22:34:01', NULL, '2025-10-28 08:09:29', 2, '2025-10-28 08:09:13'),
 (271, 'nic', 'ca', 'ca@gmail.com', '$2y$10$MrJBFDqdRt4eIrYoVDUDhOhrGe2BpnAaXjF21LtNHy0MCKYf9nzTK', '516895', '2025-10-28 13:56:26', NULL, '2025-10-28 08:46:19', 3, '2025-10-28 08:32:51'),
-(272, 'Cami', 'canteros', 'cam@gmail.com', '$2y$10$W49sXCsQAIm026ZaMPj/iu.02H9en.bP30unOuyqlzO0dEK/E6jZa', '575505', '2025-10-28 21:18:44', NULL, '2025-10-28 09:00:47', 3, '2025-10-28 09:00:34');
+(272, 'Cami', 'canteros', 'cam@gmail.com', '$2y$10$W49sXCsQAIm026ZaMPj/iu.02H9en.bP30unOuyqlzO0dEK/E6jZa', '883683', '2025-10-31 22:11:36', NULL, '2025-10-28 09:00:47', 3, '2025-10-28 09:00:34');
 
 --
 -- Índices para tablas volcadas
@@ -11149,6 +11203,32 @@ ALTER TABLE `grados`
 ALTER TABLE `horarios`
   ADD PRIMARY KEY (`id`),
   ADD KEY `curso_id` (`curso_id`);
+
+--
+-- Indices de la tabla `informes_docentes`
+--
+ALTER TABLE `informes_docentes`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `profesor_id` (`profesor_id`),
+  ADD KEY `generado_por_usuario_id` (`generado_por_usuario_id`);
+
+--
+-- Indices de la tabla `informes_estudiantes`
+--
+ALTER TABLE `informes_estudiantes`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `estudiante_id` (`estudiante_id`),
+  ADD KEY `curso_id` (`curso_id`),
+  ADD KEY `generado_por_usuario_id` (`generado_por_usuario_id`);
+
+--
+-- Indices de la tabla `informes_ia_logs`
+--
+ALTER TABLE `informes_ia_logs`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `usuario_id` (`usuario_id`),
+  ADD KEY `tipo` (`tipo`),
+  ADD KEY `referencia_id` (`referencia_id`);
 
 --
 -- Indices de la tabla `materiales`
@@ -11233,7 +11313,7 @@ ALTER TABLE `usuarios`
 -- AUTO_INCREMENT de la tabla `asistencia`
 --
 ALTER TABLE `asistencia`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8407;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8408;
 
 --
 -- AUTO_INCREMENT de la tabla `calificaciones`
@@ -11284,6 +11364,24 @@ ALTER TABLE `horarios`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=46;
 
 --
+-- AUTO_INCREMENT de la tabla `informes_docentes`
+--
+ALTER TABLE `informes_docentes`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT de la tabla `informes_estudiantes`
+--
+ALTER TABLE `informes_estudiantes`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT de la tabla `informes_ia_logs`
+--
+ALTER TABLE `informes_ia_logs`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT de la tabla `materiales`
 --
 ALTER TABLE `materiales`
@@ -11323,7 +11421,7 @@ ALTER TABLE `roles`
 -- AUTO_INCREMENT de la tabla `tareas`
 --
 ALTER TABLE `tareas`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
 
 --
 -- AUTO_INCREMENT de la tabla `tarea_adjuntos`
@@ -11379,6 +11477,21 @@ ALTER TABLE `estudiantes`
 --
 ALTER TABLE `evaluaciones`
   ADD CONSTRAINT `evaluaciones_ibfk_1` FOREIGN KEY (`curso_id`) REFERENCES `cursos` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+--
+-- Filtros para la tabla `informes_docentes`
+--
+ALTER TABLE `informes_docentes`
+  ADD CONSTRAINT `fk_informe_generador` FOREIGN KEY (`generado_por_usuario_id`) REFERENCES `usuarios` (`id`),
+  ADD CONSTRAINT `fk_informe_prof` FOREIGN KEY (`profesor_id`) REFERENCES `profesores` (`id`);
+
+--
+-- Filtros para la tabla `informes_estudiantes`
+--
+ALTER TABLE `informes_estudiantes`
+  ADD CONSTRAINT `fk_informe_curso` FOREIGN KEY (`curso_id`) REFERENCES `cursos` (`id`),
+  ADD CONSTRAINT `fk_informe_est` FOREIGN KEY (`estudiante_id`) REFERENCES `estudiantes` (`id`),
+  ADD CONSTRAINT `fk_informe_usuario` FOREIGN KEY (`generado_por_usuario_id`) REFERENCES `usuarios` (`id`);
 
 --
 -- Filtros para la tabla `materiales`
