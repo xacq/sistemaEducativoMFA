@@ -60,7 +60,7 @@ $profesores = $pdo->query("
 
         <!-- SIDEBAR DEL DIRECTOR -->
         <div class="col-md-3 col-lg-2 d-md-block sidebar collapse">
-            <?php include __DIR__ . '/../side_bar_director.php'; ?>
+            <?php include __DIR__ . './side_bar_director.php'; ?>
         </div>
 
         <!-- CONTENIDO PRINCIPAL -->
