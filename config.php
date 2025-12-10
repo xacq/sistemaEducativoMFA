@@ -34,6 +34,7 @@ define('BASE_URL', 'http://localhost/sistemaEducativoMFA');
 
 
 // Configuración de OpenAI
-define('OPENAI_API_KEY', 'TU_API_KEY_AQUI'); // ← cámbiala cuando la tengas
+//Ingresar la API key de OpenAI aquí
+define('OPENAI_API_KEY', ''); // ← cámbiala cuando la tengas
 
 ?>
